@@ -21,7 +21,6 @@ module.exports = {
         title: "欢迎",
         path: "/",
         collapsable: false, // 不折叠
-        // children: [{ title: "学前必读", path: "/" }],
       },
       {
         title: "Vue",
@@ -38,15 +37,14 @@ module.exports = {
         collapsable: false, // 不折叠
         children: [{ title: "JSX", path: "/react/JSX.md" }],
       },
-      // {
-      //   title: "TypeScript",
-      //   path: "/typescript/README.md",
-      //   collapsable: false, // 不折叠
-      //   children: [
-      //     // { title: "数组", path: "/algorithm/响应式.md" },
-      //     // { title: "二分查找", path: "/algorithm/二分查找.md" },
-      //   ],
-      // },
+      {
+        title: "TypeScript",
+        path: "/typescript",
+        collapsable: false, // 不折叠
+        children: [
+          { title: "类型体操", path: "/typescript/type-challenges.md" },
+        ],
+      },
       {
         title: "算法",
         path: "/algorithm",
