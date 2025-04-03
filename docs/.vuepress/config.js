@@ -57,6 +57,12 @@ module.exports = {
         collapsable: false, // 不折叠
         children: [{ title: "news feed", path: "/system-design/news-feed.md" }],
       },
+      {
+        title: "面试相关",
+        path: "/interview",
+        collapsable: false, // 不折叠
+        children: [{ title: "HTML", path: "/interview/html.md" }],
+      },
     ],
   },
 };

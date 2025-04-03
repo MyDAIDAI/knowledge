@@ -287,7 +287,9 @@ type MyReturnType<T extends Function> = T extends (...args: any) => infer R
 type eg7 = MyReturnType<() => string>;
 ```
 
-## 第三部分 自定义高级类型工具
+## 自定义高级类型工具
+
+未完，待续...
 
 参考：
 
