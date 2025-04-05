@@ -49,7 +49,10 @@ module.exports = {
         title: "算法",
         path: "/algorithm",
         collapsable: false, // 不折叠
-        children: [{ title: "二分查找", path: "/algorithm/二分查找.md" }],
+        children: [
+          { title: "二分查找", path: "/algorithm/二分查找.md" },
+          { title: "大数相加", path: "/algorithm/大数相加.md" },
+        ],
       },
       {
         title: "系统设计",
@@ -61,7 +64,10 @@ module.exports = {
         title: "面试相关",
         path: "/interview",
         collapsable: false, // 不折叠
-        children: [{ title: "HTML", path: "/interview/html.md" }],
+        children: [
+          { title: "HTML", path: "/interview/html.md" },
+          { title: "JavaScript", path: "/interview/JavaScript.md" },
+        ],
       },
     ],
   },
