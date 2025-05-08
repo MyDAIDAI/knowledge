@@ -988,6 +988,28 @@ function Component() {
 }
 ```
 
+## 请求缓存 + 版本控制
+
+```js
+const cache = new Map();
+
+async function fetchData(params) {
+  const cacheKey = JSON.stringify(params);
+  
+  // 命中缓存且未过期
+  if (cache.has(cacheKey) {
+    const { timestamp, data } = cache.get(cacheKey);
+    if (Date.now() - timestamp < 5000) {
+      return data;
+    }
+  }
+
+  const data = await fetch(`/api/data?q=${params}`).then(res => res.json());
+  cache.set(cacheKey, { timestamp: Date.now(), data });
+  return data;
+}
+```
+
 ### **总结**
 
 - **用途**：解决 `this` 指向问题、预设参数、适配函数调用形式。
