@@ -861,6 +861,133 @@ console.log(double(3)); // 2 * 3 = 6
 
 ---
 
+## 请求竞态问题怎么处理
+
+请求竞态可以使用三种方法进行解决，分别是**请求中断**，**结果标记**，**时序锁**
+
+### 请求中断
+
+使用`AbortController`主动取消未完成的旧请求，确保只处理最后一次请求结果
+
+```js
+// 存储当前请求的控制器
+let currentController = null;
+
+async function fetchData(params) {
+  // 中断前一个未完成的请求
+  if (currentController) {
+    currentController.abort();
+  }
+
+  // 创建新控制器
+  const controller = new AbortController();
+  currentController = controller;
+
+  try {
+    const response = await fetch(`/api/data?q=${params}`, {
+      signal: controller.signal
+    });
+    const data = await response.json();
+    
+    // 处理数据前确认是否为最新请求
+    if (!controller.signal.aborted) {
+      updateUI(data);
+    }
+  } catch (error) {
+    if (error.name !== 'AbortError') {
+      console.error('请求错误:', error);
+    }
+  }
+}
+
+// 示例：搜索框输入联想
+searchInput.addEventListener('input', (e) => {
+  fetchData(e.target.value);
+});
+```
+
+### 结果标记
+
+为每个请求生成唯一标识，只处理最新标识对应的结果
+
+```js
+let lastRequestId = 0;
+
+async function fetchData(params) {
+  const requestId = ++lastRequestId;
+
+  const response = await fetch(`/api/data?q=${params}`);
+  const data = await response.json();
+
+  // 仅处理最新请求的结果
+  if (requestId === lastRequestId) {
+    updateUI(data);
+  }
+}
+```
+
+### 时序锁（防止重复提交）
+
+```js
+let isFetching = false;
+
+async function submitForm(data) {
+  if (isFetching) return;
+
+  isFetching = true;
+  try {
+    await fetch('/api/submit', { method: 'POST', body: data });
+  } finally {
+    isFetching = false;
+  }
+}
+```
+
+对于流式接口，需要不断的处理后端发送过来的数据，应该使用`AbortControll`来进行中断，使用时序锁的方式，会导致获取到数据错乱
+
+### 自定义封装hook
+
+```js
+function useAbortableFetch() {
+  const controllers = useRef(new Map());
+
+  const fetchData = async (url, options = {}) => {
+    const key = options.key || url;
+    
+    // 中断前序相同 key 的请求
+    if (controllers.current.has(key)) {
+      controllers.current.get(key).abort();
+    }
+
+    const controller = new AbortController();
+    controllers.current.set(key, controller);
+
+    try {
+      const response = await fetch(url, {
+        ...options,
+        signal: controller.signal
+      });
+      return response.json();
+    } catch (error) {
+      if (error.name !== 'AbortError') throw error;
+    } finally {
+      controllers.current.delete(key);
+    }
+  };
+
+  return fetchData;
+}
+
+// 使用示例
+function Component() {
+  const fetch = useAbortableFetch();
+
+  const handleSearch = (query) => {
+    fetch('/api/search', { key: `search-${query}` });
+  };
+}
+```
+
 ### **总结**
 
 - **用途**：解决 `this` 指向问题、预设参数、适配函数调用形式。

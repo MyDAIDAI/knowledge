@@ -1,6 +1,6 @@
 # `HTML`相关面试题
 
-## `What does a doctype do?`, `doctype`是做什么的？
+## 1. `What does a doctype do?`, `doctype`是做什么的？
 
 HTML 的 `<!DOCTYPE>` 声明（文档类型声明）是每个 HTML 文档**必须包含的第一行代码**，它的核心作用是**告知浏览器如何正确解析和渲染页面**。以下是其详细作用与功能：
 
@@ -75,7 +75,7 @@ HTML 的 `<!DOCTYPE>` 声明（文档类型声明）是每个 HTML 文档**必�
 - **开发者价值**：确保页面按预期渲染，避免布局“玄学问题”。
 - **现代实践**：始终使用 `<!DOCTYPE html>`（HTML5 声明），无需其他复杂配置。
 
-## `How do you serve a page with content in multiple languages?` 如何配置多语言页面的内容？
+## 2. `How do you serve a page with content in multiple languages?` 如何配置多语言页面的内容？
 
 配置多语言页面需要结合 **前端结构、后端逻辑、SEO 优化** 和 **用户体验设计**，以下是详细的实现方案：
 
@@ -333,7 +333,7 @@ function App() {
 
 通过以上方案，可实现高效、可维护的多语言页面，兼顾用户体验和搜索引擎友好性。
 
-## What are data- attributes good for? `data-`属性有什么好处？
+## 3. `What are data- attributes good for?` `data-`属性有什么好处？
 
 `data-*` 属性是 HTML5 中用于在 HTML 元素上**存储自定义数据**的标准方式。它们为开发者提供了一种灵活且符合标准的机制，用于关联与 DOM 元素相关的额外信息。以下是其核心用途和优势：
 
@@ -475,7 +475,7 @@ function App() {
 
 通过合理使用 `data-*` 属性，可以显著提升代码的可维护性、可读性，同时确保遵循 Web 标准。
 
-## the difference betwee a cookie, sessionStorge and localStorge
+## 4. `the difference betwee a cookie, sessionStorge and localStorge`
 
 The differences between cookies, `sessionStorage`, and `localStorage` can be categorized by their **storage capacity**, **lifespan**, **scope**, **server interaction**, and **use cases**. Here's a structured breakdown:
 
@@ -566,7 +566,7 @@ The differences between cookies, `sessionStorage`, and `localStorage` can be cat
 
 By understanding these distinctions, you can choose the right storage mechanism for your application’s needs.
 
-## Describe the difference between `<script>`, `<script async>` and `<script defer>`
+## 5. Describe the difference between `<script>`, `<script async>` and `<script defer>`
 
 The `<script>`, `<script async>`, and `<script defer>` attributes control how JavaScript files are loaded and executed in an HTML document, impacting page rendering and script execution order. Here’s a breakdown:
 
@@ -643,7 +643,7 @@ The `<script>`, `<script async>`, and `<script defer>` attributes control how Ja
 
 By choosing the right loading strategy, you optimize page speed and ensure scripts behave as expected.
 
-## Why is it generally a good idea to position CSS `<link>`s between `<head></head>` and JS `<script>`s just before `</body>`? Do you know any exceptions?
+## 6. Why is it generally a good idea to position CSS `<link>`s between `<head></head>` and JS `<script>`s just before `</body>`? Do you know any exceptions?
 
 将 CSS `<link>` 放在 `<head>` 中，而将 JS `<script>` 放在 `</body>` 之前，主要是为了优化**页面渲染性能**和**用户体验**。以下是详细解释及例外情况：
 
@@ -763,7 +763,7 @@ By choosing the right loading strategy, you optimize page speed and ensure scrip
 
 遵循这些原则，能在绝大多数场景下优化加载性能，同时灵活应对特殊需求。
 
-## What is progressive rendering? 什么是渐进式渲染？
+## 7. What is progressive rendering? 什么是渐进式渲染？
 
 渐进式渲染（Progressive Rendering）是一种优化网页加载性能的策略，其核心思想是**优先展示用户可见的关键内容**，随后逐步加载和渲染非关键资源，以提升用户感知速度和交互体验。以下是其核心原理、技术实现与典型应用场景：
 
@@ -899,7 +899,7 @@ By choosing the right loading strategy, you optimize page speed and ensure scrip
 
 渐进式渲染通过**分阶段加载、流式传输和资源优先级控制**，在资源有限的环境下最大化用户体验。它尤其适合内容密集型网站（如媒体、电商），但需结合具体场景平衡性能与功能完整性。
 
-## `canvas`与`svg`的区别
+## 8. `canvas`与`svg`的区别
 
 Canvas 和 SVG 是两种在网页上绘制图形的技术，但它们在实现方式、适用场景及特性上有显著区别。以下是详细的对比：
 
