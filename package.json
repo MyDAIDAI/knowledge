@@ -4,6 +4,12 @@
   "main": "index.js",
   "license": "MIT",
   "devDependencies": {
+    "@babel/preset-env": "^7.27.2",
+    "@jest/globals": "^30.0.0",
+    "babel-jest": "^30.0.0",
+    "jest": "^30.0.0",
+    "ts-jest": "^29.3.4",
+    "typescript": "^5.8.3",
     "vuepress": "^1.9.10"
   },
   "scripts": {
