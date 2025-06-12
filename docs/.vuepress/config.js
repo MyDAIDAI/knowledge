@@ -79,6 +79,16 @@ module.exports = {
         ],
       },
       {
+        title: 'GFE',
+        path: '/GFE',
+        collapsable: false, // 不折叠
+        children: [
+          { title: 'debounce', path: '/GFE/Debounce' },
+          { title: 'myReduce', path: '/GFE/myReduce.md' },
+          { title: 'classNames', path: '/GFE/classnamesFile.md' },
+        ],
+      },
+      {
         title: 'Git',
         path: '/git',
         collapsable: false, // 不折叠
