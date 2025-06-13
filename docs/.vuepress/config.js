@@ -87,6 +87,7 @@ module.exports = {
           { title: 'myReduce', path: '/GFE/02.myReduce/' },
           { title: 'classNames', path: '/GFE/03.classnames/' },
           { title: 'flatten', path: '/GFE/04.flatten/' },
+          { title: 'throttle', path: '/GFE/05.throttle/' },
         ],
       },
       {
