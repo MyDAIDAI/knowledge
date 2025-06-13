@@ -83,10 +83,10 @@ module.exports = {
         path: '/GFE',
         collapsable: false, // 不折叠
         children: [
-          { title: 'debounce', path: '/GFE/debounce/' },
-          { title: 'myReduce', path: '/GFE/myReduce/' },
-          { title: 'classNames', path: '/GFE/classnamesFun/' },
-          { title: 'flatten', path: '/GFE/FlattenFun/' },
+          { title: 'debounce', path: '/GFE/01.debounce/' },
+          { title: 'myReduce', path: '/GFE/02.myReduce/' },
+          { title: 'classNames', path: '/GFE/03.classnames/' },
+          { title: 'flatten', path: '/GFE/04.flatten/' },
         ],
       },
       {
