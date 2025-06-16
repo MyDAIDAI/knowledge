@@ -96,6 +96,7 @@ module.exports = {
         collapsable: false, // 不折叠
         children: [
           { title: '01.Balanced Brackets', path: '/Blind/01.Balanced Brackets/' },
+          { title: '02.Find Duplicates in Array', path: '/Blind/02.Find Duplicates in Array/' },
         ],
       },
       {
