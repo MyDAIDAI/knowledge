@@ -15,5 +15,9 @@
   "scripts": {
     "docs:dev": "vuepress dev docs",
     "docs:build": "vuepress build docs"
+  },
+  "dependencies": {
+    "@tiptap/extension-color": "^2.10.2",
+    "@tiptap/extension-highlight": "^2.10.2"
   }
 }

@@ -83,11 +83,19 @@ module.exports = {
         path: '/GFE',
         collapsable: false, // 不折叠
         children: [
-          { title: 'debounce', path: '/GFE/01.debounce/' },
-          { title: 'myReduce', path: '/GFE/02.myReduce/' },
-          { title: 'classNames', path: '/GFE/03.classnames/' },
-          { title: 'flatten', path: '/GFE/04.flatten/' },
-          { title: 'throttle', path: '/GFE/05.throttle/' },
+          { title: 'Debounce', path: '/GFE/01.debounce/' },
+          { title: 'MyReduce', path: '/GFE/02.myReduce/' },
+          { title: 'ClassNames', path: '/GFE/03.classnames/' },
+          { title: 'Flatten', path: '/GFE/04.flatten/' },
+          { title: 'Throttle', path: '/GFE/05.throttle/' },
+        ],
+      },
+      {
+        title: 'Blind',
+        path: '/Blind',
+        collapsable: false, // 不折叠
+        children: [
+          { title: '01.Balanced Brackets', path: '/Blind/01.Balanced Brackets/' },
         ],
       },
       {
