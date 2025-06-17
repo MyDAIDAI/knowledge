@@ -97,6 +97,7 @@ module.exports = {
         children: [
           { title: '01.Balanced Brackets', path: '/Blind/01.Balanced Brackets/' },
           { title: '02.Find Duplicates in Array', path: '/Blind/02.Find Duplicates in Array/' },
+          { title: '03.Find Missing Number in Sequence', path: '/Blind/03.Find Missing Number in Sequence/' },
         ],
       },
       {

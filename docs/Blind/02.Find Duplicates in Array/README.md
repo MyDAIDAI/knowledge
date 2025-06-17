@@ -70,7 +70,7 @@ export default function findDuplicates(numbers: number[]): boolean {
 }
 ```
 
-时间复杂度：`O(n)`，空间复杂度：`O(1)`，但是会破坏原有数组的有序性
+时间复杂度：`O(nlogn)`，排序的时间复杂度为`O(nlogn)`，空间复杂度：`O(1)`，但是会破坏原有数组的有序性
 
 ### 使用`Set`或者`Map`
 
