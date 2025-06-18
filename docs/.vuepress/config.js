@@ -88,6 +88,7 @@ module.exports = {
           { title: 'ClassNames', path: '/GFE/03.classnames/' },
           { title: 'Flatten', path: '/GFE/04.flatten/' },
           { title: 'Throttle', path: '/GFE/05.throttle/' },
+          { title: 'Type Utilities', path: '/GFE/06.Type Utilities/' },
         ],
       },
       {
