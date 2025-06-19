@@ -89,6 +89,7 @@ module.exports = {
           { title: 'Flatten', path: '/GFE/04.flatten/' },
           { title: 'Throttle', path: '/GFE/05.throttle/' },
           { title: 'Type Utilities', path: '/GFE/06.Type Utilities/' },
+          { title: 'Type Utilities II', path: '/GFE/07.Type Utilities II/' },
         ],
       },
       {
@@ -96,9 +97,9 @@ module.exports = {
         path: '/Blind',
         collapsable: false, // 不折叠
         children: [
-          { title: '01.Balanced Brackets', path: '/Blind/01.Balanced Brackets/' },
-          { title: '02.Find Duplicates in Array', path: '/Blind/02.Find Duplicates in Array/' },
-          { title: '03.Find Missing Number in Sequence', path: '/Blind/03.Find Missing Number in Sequence/' },
+          { title: 'Balanced Brackets', path: '/Blind/01.Balanced Brackets/' },
+          { title: 'Find Duplicates in Array', path: '/Blind/02.Find Duplicates in Array/' },
+          { title: 'Find Missing Number in Sequence', path: '/Blind/03.Find Missing Number in Sequence/' },
         ],
       },
       {
