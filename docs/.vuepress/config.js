@@ -90,6 +90,7 @@ module.exports = {
           { title: 'Throttle', path: '/GFE/05.throttle/' },
           { title: 'Type Utilities', path: '/GFE/06.Type Utilities/' },
           { title: 'Type Utilities II', path: '/GFE/07.Type Utilities II/' },
+          { title: 'Promise.all', path: '/GFE/08.Promise.all/' },
         ],
       },
       {
