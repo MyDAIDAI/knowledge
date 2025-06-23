@@ -91,6 +91,7 @@ module.exports = {
           { title: 'Type Utilities', path: '/GFE/06.Type Utilities/' },
           { title: 'Type Utilities II', path: '/GFE/07.Type Utilities II/' },
           { title: 'Promise.all', path: '/GFE/08.Promise.all/' },
+          { title: 'Data Merging', path: '/GFE/09.Data Merging/' },
         ],
       },
       {
