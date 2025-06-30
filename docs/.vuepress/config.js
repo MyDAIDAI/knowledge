@@ -92,6 +92,8 @@ module.exports = {
           { title: 'Type Utilities II', path: '/GFE/07.Type Utilities II/' },
           { title: 'Promise.all', path: '/GFE/08.Promise.all/' },
           { title: 'Data Merging', path: '/GFE/09.Data Merging/' },
+          { title: 'Deep Clone', path: '/GFE/10.Deep Clone/' },
+          { title: 'Event Emitter', path: '/GFE/11.Event Emitter/' },
         ],
       },
       {
