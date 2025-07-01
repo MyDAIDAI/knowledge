@@ -94,6 +94,7 @@ module.exports = {
           { title: 'Data Merging', path: '/GFE/09.Data Merging/' },
           { title: 'Deep Clone', path: '/GFE/10.Deep Clone/' },
           { title: 'Event Emitter', path: '/GFE/11.Event Emitter/' },
+          { title: 'getElementsByStyle', path: '/GFE/12.getElementsByStyle/' },
         ],
       },
       {
