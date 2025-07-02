@@ -95,6 +95,7 @@ module.exports = {
           { title: 'Deep Clone', path: '/GFE/10.Deep Clone/' },
           { title: 'Event Emitter', path: '/GFE/11.Event Emitter/' },
           { title: 'getElementsByStyle', path: '/GFE/12.getElementsByStyle/' },
+          { title: 'Function.prototype.call', path: '/GFE/13.Function.prototype.call/' },
         ],
       },
       {
