@@ -109,7 +109,7 @@ export default function mapAsyncLimit<T, U>(
 ### 方法 4：最大并发数 `Chunkless`
 
 之前的方法有一个缺点，就是会出现一个空余时间，并且可用并发上线没有得到充分利，如下图：
-![alt text](image.png)
+![alt text](./image.png)
 
 - 顺序请求：顺序请求一定能够确保请求数在并发限制`size`内，但是由于需要等待前面请求的返回之后再请求下一个，所以时间是很慢的
 - `Chunks`：`Chunks`方法提高了同时并发的请求数量，但是在前一个`chunks`的所有请求完成之前，不能进行下一次的请求，如果一个`chunks`内有一个比较慢的请求，那么会阻塞下一次的请求
