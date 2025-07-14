@@ -96,6 +96,8 @@ module.exports = {
           { title: 'Event Emitter', path: '/GFE/11.Event Emitter/' },
           { title: 'getElementsByStyle', path: '/GFE/12.getElementsByStyle/' },
           { title: 'Function.prototype.call', path: '/GFE/13.Function.prototype.call/' },
+          { title: 'List Format', path: '/GFE/14.List Format/' },
+          { title: 'Map Async Limit', path: '/GFE/15.Map Async Limit/' },
         ],
       },
       {
