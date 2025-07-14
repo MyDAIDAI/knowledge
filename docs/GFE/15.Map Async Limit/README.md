@@ -84,4 +84,71 @@ export default function mapAsyncLimit<T, U>(
 }
 ```
 
-### 方法 2：使用`async/await`来执行`chunks`
+### 方法 3：使用`async/await`来执行`chunks`
+
+```ts
+export default function mapAsyncLimit<T, U>(
+  iterable: Array<T>,
+  callbackFn: (value: T) => Promise<U>,
+  size: number,
+): Promise<Array<U>> {
+  const results: Array<U> = [];
+  const chunks = size || 1;
+
+  for(let i = 0; i < iterable.length; i += chunks) {
+    const currentChunk = iterable.slice(i, i + chunks);
+    const chunkResults = await Promise.all(currentChunk.map(callbackFn));
+
+    results.push(...chunkResults);
+  }
+
+  return results;
+}
+```
+
+### 方法 4：最大并发数 `Chunkless`
+
+之前的方法有一个缺点，就是会出现一个空余时间，并且可用并发上线没有得到充分利，如下图：
+![alt text](image.png)
+
+- 顺序请求：顺序请求一定能够确保请求数在并发限制`size`内，但是由于需要等待前面请求的返回之后再请求下一个，所以时间是很慢的
+- `Chunks`：`Chunks`方法提高了同时并发的请求数量，但是在前一个`chunks`的所有请求完成之前，不能进行下一次的请求，如果一个`chunks`内有一个比较慢的请求，那么会阻塞下一次的请求
+- `Chunkless`：最有效的方式就是同时并发`size`大小的请求，并且当里面有任务完成时，进行下一个异步操作
+
+```ts
+export default function mapAsyncLimit<T, U>(
+  iterable: Array<T>,
+  callbackFn: (value: T) => Promise<U>,
+  size: number
+): Promise<Array<U>> {
+  return new Promise(resolve, reject) => {
+    const results: Array<U> = [];
+    let nextIndex = 0;
+    let resolved = 0;
+    
+    if(iterable.length === 0) {
+      resolve(results);
+      return;
+    }
+
+    function processItem(index: number) {
+      nextIndex++;
+      callbackFn(iterable[index]).then((value) => {
+        results[index] = value;
+        resolved++;
+        if(resolved === iterable.length) {
+          resolve(results);
+          return;
+        }
+        if(nextIndex < iterable.length) {
+          processItem(nextIndex);
+        }
+      }).catch(reject);
+    }
+
+    for(let i = 0; i < size && i < iterable.length; i++) {
+      processItem(i);
+    }
+  });
+}
+```
