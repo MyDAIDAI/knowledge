@@ -121,7 +121,7 @@ export default function mapAsyncLimit<T, U>(
   callbackFn: (value: T) => Promise<U>,
   size: number
 ): Promise<Array<U>> {
-  return new Promise(resolve, reject) => {
+  return new Promise((resolve, reject) => {
     const results: Array<U> = [];
     let nextIndex = 0;
     let resolved = 0;
