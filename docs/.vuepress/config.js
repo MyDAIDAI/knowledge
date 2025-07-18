@@ -98,6 +98,7 @@ module.exports = {
           { title: 'Function.prototype.call', path: '/GFE/13.Function.prototype.call/' },
           { title: 'List Format', path: '/GFE/14.List Format/' },
           { title: 'Map Async Limit', path: '/GFE/15.Map Async Limit/' },
+          { title: 'Deep Equal', path: '/GFE/16.Deep Equal/' },
         ],
       },
       {
