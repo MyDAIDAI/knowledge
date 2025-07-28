@@ -50,8 +50,7 @@ module.exports = {
         path: '/nextjs',
         collapsable: false, // 不折叠
         children: [
-          { title: '文档', path: '/nextjs/docs.md' },
-          { title: '使用', path: '/nextjs/use.md' },
+          { title: 'Fetching Data', path: '/nextjs/docs/Fetching Data.md' },
         ],
       },
       {
