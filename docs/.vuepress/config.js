@@ -54,6 +54,14 @@ module.exports = {
         ],
       },
       {
+        title: 'Node.js',
+        path: '/nodejs',
+        collapsable: false, // 不折叠
+        children: [
+          { title: '异步式IO', path: '/nodejs/异步式io.md' },
+        ],
+      },
+      {
         title: '算法',
         path: '/algorithm',
         collapsable: false, // 不折叠
