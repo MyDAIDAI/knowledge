@@ -186,3 +186,44 @@ const Deact = {
   createTextElement,
 };
 ```
+
+## 第二步：`render`函数
+
+现在，我们来创建`render`函数
+
+```js
+function render(element, container) {
+  const dom = document.createElement(element.type);
+  // 遍历 element.props 中的属性，并将其添加到 node 中
+  Object.keys(element.props).forEach((key) => {
+    dom[key] = element.props[key];
+  });
+  // 遍历 element.props.children 中的元素，并将其添加到 node 中
+  element.props.children.forEach((child) => {
+    render(child, dom);
+  });
+  container.appendChild(dom);
+}
+```
+
+需要对文本类型节点做特殊处理:
+
+```js
+function render(element, container) {
+  const dom =
+    element.type === "TEXT_ELEMENT"
+      ? document.createTextNode("")
+      : document.createElement(element.type);
+  // 遍历 element.props 中的属性，并将其添加到 node 中
+  Object.keys(element.props).forEach((key) => {
+    if (key !== "children") {
+      dom[key] = element.props[key];
+    }
+  });
+  // 遍历 element.props.children 中的元素，并将其添加到 node 中
+  element.props.children.forEach((child) => {
+    render(child, dom);
+  });
+  container.appendChild(dom);
+}
+```
