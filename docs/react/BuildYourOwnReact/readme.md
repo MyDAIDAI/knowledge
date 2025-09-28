@@ -74,3 +74,115 @@ container.appendChild(node);
 ```
 
 所以上面实现了将`JSX`转换为`JS`，并将其根据`type`类型生成对应`DOM`节点，并插入到页面中的过程。
+
+## 第一步：`createElement`函数
+
+在上面中可以看到，需要使用`createElement`函数，生成一个`React`中的`element`
+
+```js
+const element = React.createElement(
+  "div",
+  { id: "foo" },
+  React.createElement("a", null, "bar"),
+  React.createElement("b")
+);
+```
+
+其`createElement`函数主要是创建了一个`element`对象，用来对相应的`DOM`节点进行描述，主要有`type`以及`props`属性。所以我们可以根据这个进行`createElement`的编写
+
+```js
+{
+  "type": "div",
+  "props": { "children": [] }
+}
+```
+
+比如：`createElement("div")`返回：
+
+```js
+{
+  "type": "div",
+  "props": { "children": [] }
+}
+```
+
+`createElement("div", null, a)`返回：
+
+```js
+{
+  "type": "div",
+  "props": { "children": [a] }
+}
+```
+
+`createElement("div", null, a, b)`返回：
+
+```js
+{
+  "type": "div",
+  "props": { "children": [a, b] }
+}
+```
+
+传入`children`中的数组的值类型，即可以是一个字符串，数字，也可以是一个`element`对象，如
+
+```js
+{
+  "type": "div",
+  "props": {
+    "children": [
+      {
+        "type": "div",
+        "props": { "children": [a, b] }
+      },
+      b
+    ]
+  }
+}
+```
+
+如果值的类型为字符串以及数字，那么会创建一个`TEXT_ELEMENT`类型来指定其为文本类型节点（注意 📢： `React`源码中没有对原始值以及数组为空的情况进行处理，但是我们为了简化我们的代码，做了该处理。）
+
+```js
+function createElement(type, props, ...children) {
+  return {
+    type,
+    props: {
+      ...props,
+      children,
+    },
+  };
+}
+```
+
+添加`TEXT_ELEMENT`类型节点的处理逻辑：
+
+```js
+function createElement(type, props, ...children) {
+  return {
+    type,
+    props: {
+      ...props,
+      children: children.map((child) =>
+        typeof child === "object" ? child : createTextElement(child)
+      ),
+    },
+  };
+}
+
+function createTextElement(text) {
+  return {
+    type: "TEXT_ELEMENT",
+    props: { nodeValue: text, children: [] },
+  };
+}
+```
+
+为了与`React`代码进行区分，将我们其命名为：`Deact`，如下：
+
+```js
+const Deact = {
+  createElement,
+  createTextElement,
+};
+```
