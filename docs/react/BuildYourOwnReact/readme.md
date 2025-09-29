@@ -227,3 +227,43 @@ function render(element, container) {
   container.appendChild(dom);
 }
 ```
+
+## 第三步：`Concurrent`模式
+
+上面的递归调用有一个问题。
+
+一旦我们开始渲染，直到我们渲染完成整个`DOM`树，这个渲染过程不会停止。如果这个树非常大，那么会阻塞主线程很长时间。**如果浏览器有一些如处理用户输入或者动画类的高优先级人物，则必须要等待整个渲染完成才能执行。**这是非常不友好的，会给用户造成非常不好的体验。
+
+我们为了解决这个问题，需要做下面 👇🏻 几件事：
+
+1. 将`render`中不能中断的渲染大任务，拆解为可以中断的小任务
+2. 确定当前浏览器是否有空余时间
+3. 需要有一个机制，在有空余时间时，可以进行循环执行，直到任务执行完成
+4. 需要一个全局变量，保存下一次需要执行的任务。可以将任务接着执行
+
+### 实现循环机制
+
+```js
+// 将大任务拆分为小任务的循环执行机制
+let nextUnitOfWork = null; // 全局变量，保存接下来需要执行的任务
+function workLoop(deadline) {
+  let shouldYield = false; // 判断浏览器是否有剩余时间
+  while (nextUnitOfWork && !shouldYield) {
+    // 在一个requestIdleCallback中，有后续任务并且浏览器有剩余时间，则继续执行
+    nextUnitOfWork = performUnitOfWork(nextUnitOfWork);
+    shouldYield = deadline.timeRemaining() < 1;
+  }
+  // 继续监听下一个浏览器空余时间
+  requestIdleCallback(workLoop);
+}
+
+requestIdleCallback(workLoop);
+```
+
+可以使用`requestIdleCallback`来创建一个`loop`循环，可以将`requestIdleCallback`作为一个`setTimeout`。
+
+浏览器在空闲时会调用传入`requestIdleCallback`的回调函数，并向其中传入`deadline`变量，该变量可以获取实时的剩余时间。
+
+`React`内部不在使用`requestIdleCallback`，而是使用`scheduler`调度器。但是在这个例子中，我们的核心不在调度部分，所以仍然使它。
+
+`requestIdleCallback`会传入回调函数一个`deadline`参数，我们可以使用这个参数来判断到浏览器再次控制还剩余多少时间
