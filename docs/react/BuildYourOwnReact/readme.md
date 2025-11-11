@@ -28,7 +28,7 @@ ReactDOM.render(element, container);
 `JSX`通过像`Babel`类的构建工具，将其转换为`JS`，转换规则也是简单的：使用`createElement`代替，传递进入`tag`名称以及相应地`props`和`children`作为参数，如下：
 
 ```js
-const element = <h1 titl="foo">hello</h1>;
+const element = <h1 title="foo">hello</h1>;
 
 // 转换为
 const element = React.createElement(
@@ -89,13 +89,6 @@ const element = React.createElement(
 ```
 
 其`createElement`函数主要是创建了一个`element`对象，用来对相应的`DOM`节点进行描述，主要有`type`以及`props`属性。所以我们可以根据这个进行`createElement`的编写
-
-```js
-{
-  "type": "div",
-  "props": { "children": [] }
-}
-```
 
 比如：`createElement("div")`返回：
 
@@ -232,7 +225,7 @@ function render(element, container) {
 
 上面的递归调用有一个问题。
 
-一旦我们开始渲染，直到我们渲染完成整个`DOM`树，这个渲染过程不会停止。如果这个树非常大，那么会阻塞主线程很长时间。**如果浏览器有一些如处理用户输入或者动画类的高优先级人物，则必须要等待整个渲染完成才能执行。**这是非常不友好的，会给用户造成非常不好的体验。
+一旦我们开始渲染，直到我们渲染完成整个`DOM`树，这个渲染过程不会停止。如果这个树非常大，那么会阻塞主线程很长时间。**如果浏览器有一些如处理用户输入或者动画类的高优先级任务，则必须要等待整个渲染完成才能执行。**这是非常不友好的，会给用户造成非常不好的体验。
 
 我们为了解决这个问题，需要做下面 👇🏻 几件事：
 
@@ -251,6 +244,7 @@ function workLoop(deadline) {
   while (nextUnitOfWork && !shouldYield) {
     // 在一个requestIdleCallback中，有后续任务并且浏览器有剩余时间，则继续执行
     nextUnitOfWork = performUnitOfWork(nextUnitOfWork);
+    // 执行完一个任务后，判断是否有空余时间，如果没空余时间，则停止循环，将当前变量存储在nextUnitWork中
     shouldYield = deadline.timeRemaining() < 1;
   }
   // 继续监听下一个浏览器空余时间
@@ -267,3 +261,152 @@ requestIdleCallback(workLoop);
 `React`内部不在使用`requestIdleCallback`，而是使用`scheduler`调度器。但是在这个例子中，我们的核心不在调度部分，所以仍然使它。
 
 `requestIdleCallback`会传入回调函数一个`deadline`参数，我们可以使用这个参数来判断到浏览器再次控制还剩余多少时间
+
+## 第四步：Fibers
+
+为了组织工作单元，我们需要一种数据结构（可以保存当前执行的上下文以及可以随时进行中断）：`fiber`树
+
+我们将针对每一个`element`都有一个对应的`fiber`，每一个`fiber`将成为一个工作单元
+
+如果我们想渲染下面的`element`树
+
+```ts
+Deact.render(
+  <div>
+    <h1>
+      <p></p>
+      <a></a>
+    </h1>
+    <h2></h2>
+  </div>,
+  container
+);
+```
+
+在`render`中，我们将创建根`RootFiber`以及将其设置为`nextUnitOfWork`。其他的工作将在`performUnitWork`函数中发生，我们针对每一个`fiber`节点将会做下面三件事：
+
+1. 增加一个插入到`DOM`的元素`element`
+2. 为`element`的子孙创建`fiber`
+3. 选择下一个工作单元
+
+![alt text](image.png)
+
+这种数据结构的一个目的就是**更加容易的发现下一个工作单元**，那就是为什么每一个`fiber`都有一个链接指向它的第一个子元素，它的下一个兄弟元素以及它的父级元素
+
+当完成一个`fiber`的工作，如果它存在子节点，那么这个子节点的`fiber`将成为下一个工作单元
+
+在我们上图的例子中，当我们完成`div`的`fiber`的工作，那么下一个工作单元就是`h1`的`fiberNode`
+
+如果这个`fiberNode`没有子节点，那么会使用`sibling`的`fiberNoode`作为下一个工作单元
+
+在我们上图的例子中，`p`的`fiberNode`执行完成后，没有`child`的`fiberNode`，那么将返回`a`的`fiberNode`作为下一个工作单元
+
+如果一个`fiberNode`既没有`child`的`fiberNode`，也没有`sibling`的`fiberNode`，那就就会去寻找`uncle`叔叔节点的`fiberNode`，也就是`sibling`的`parent`节点
+
+如上图中的`a`以及`h2`节点
+
+如果`parent`的`fiberNode`没有`sibling`节点，那么会继续向上查找`parent`的`fiberNode`直到发现一个`sibling`节点，或者直到到达顶层的`root`节点。如果到达`root`节点，那么意味着我们已经完成了这次`perform`渲染的所有工作
+
+让我们根据上面的思想来进行代码改造：
+
+将`render`中与创建`DOM`相关的代码单独封装为一个函数，如下：
+
+```js
+function createDom(fiber) {
+  const dom =
+    fiber.type === "TEXT_ELEMENT"
+      ? document.createTextNode("")
+      : document.createElement(fiber.type);
+  const isProperty = (key) => key !== "children";
+  Object.keys(fiber.props)
+    .filter(isProperty)
+    .forEach((name) => {
+      dom[name] = fiber.props[name];
+    });
+  return dom;
+}
+```
+
+在`render`函数中，我们将设置`nextUnitOfWork`为`fiber`树的根节点
+
+```js
+function render(element, container) {
+  nextUnitOfWork = {
+    dom: container,
+    props: {
+      children: [element],
+    },
+  };
+}
+```
+
+然后，当浏览器准备好时，它将会调用过`workLoop`函数，然后将从`root`节点开始工作.
+
+下面，我们需要来完`performUnitOfWork`函数，首先，我们创建一个新的`node`，并将其插入到`DOM`中。我们通过`fiber.dom`属性去会追踪其`DOM`的`node`节点
+
+```js
+function performUnitOfWork(fiber) {
+  // create new node and append it to the DOM
+  if (!fiber.dom) {
+    fiber.dom = createDom(fiber);
+  }
+  if (fiber.parent) {
+    fiber.parent.dom.appendChild(fiber.dom);
+  }
+}
+```
+
+然后，对于每一个`child`，我们将会创建其对应的`fiber`节点，然后将其`fiber`对应的`child`以及`sibling`指向对应的`fiberNode`节点
+
+```js
+function performUnitOfWork(fiber) {
+  // ...add dom node
+  // create new fibers
+  const elements = fiber.props.children;
+  let index = 0;
+  let prevSibling = null;
+  while (index < elements.length) {
+    const element = elements[index];
+    const newFiber = {
+      type: element.type,
+      props: element.props,
+      parent: fiber,
+      dom: null,
+    };
+    // child指向第一个子节点
+    if (index === 0) {
+      fiber.child = newFiber;
+      newFiber.parent = fiber;
+    } else {
+      // 循环建立sibling连接
+      prevSibling.sibling = newFiber;
+      newFiber.parent = fiber;
+    }
+    prevSibling = newFiber;
+    index++;
+  }
+}
+```
+
+最后，我们需要返回数据以供下一个工作单元使用，按照上面 👆🏻 的过程，我们首先返回`child`，然后是`sibling`，最后是`uncle`等等
+
+```js
+function performUnitOfWork(fiber) {
+  // ...add dom node
+  // ...create new fibers
+
+  // 如果有子节点，则直接返回
+  if (fiber.child) {
+    return fiber.child;
+  }
+  // 查找sibling节点，如果存在则返回，否则返回parent的sibling节点
+  let nextFiber = fiber;
+  while (nextFiber) {
+    if (nextFiber.sibling) {
+      return nextFiber.sibling;
+    }
+    nextFiber = nextFiber.parent;
+  }
+  return null;
+}
+```
