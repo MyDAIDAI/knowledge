@@ -410,3 +410,46 @@ function performUnitOfWork(fiber) {
   return null;
 }
 ```
+
+## 第五步：`Render`和`Commit`阶段
+
+上面的代码实现了生成`fiber`以及根据`fiber`生成对应的`DOM`，并将其插入到页面中。但是这样也会造成其他的问题。
+
+我们每次对一个`fiber`进行`perform`的时候，都会创建一个新的`DOM`，并将其插入到`DOM`中。并且由于我们的执行过程可以被浏览器的高优先级任务中断，在这种情况下，用户会看到没有渲染完成的`UI`。这是非常不友好的。
+
+根据我们上面的代码，我们需要将其挂载插入`DOM`的部分移除
+
+除此之外，还需要追踪`fiber`树的跟节点，我们将其称为`workInProgress`或者`wipRoot`
+
+```js
+function render(element, container) {
+  wipRoot = {
+    dom: container,
+    props: {
+      children: [element],
+    },
+  };
+  nextUnitOfWork = wipRoot;
+}
+
+// 全局变量，保存接下来需要执行的任务
+let nextUnitOfWork = null;
+let wipRoot = null;
+```
+
+当执行完所有的`perform`后，再将整个`fiber`树一起提交到`DOM`中，修改为如下代码：
+
+```js
+function workLoop(deadline) {
+  let shouldYield = false;
+  while (nextUnitOfWork && !shouldYield) {
+    nextUnitOfWork = performUnitOfWork(nextUnitOfWork);
+    shouldYield = deadline.timeRemaining() < 1;
+  }
+  // 当nextUnitOfWork的值为Null的时候，代表已经完成了整个fiber树的perform过程
+  if (!nextUnitOfWork && wipRoot) {
+    commitRoot();
+  }
+  requestIdleCallback(workLoop);
+}
+```

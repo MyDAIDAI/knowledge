@@ -32,21 +32,26 @@ function createDom(fiber) {
 }
 
 function render(element, container) {
-  nextUnitOfWork = {
+  wipRoot = {
     dom: container,
     props: {
       children: [element],
     },
   };
+  nextUnitOfWork = wipRoot;
 }
 
 // 将大任务拆分为小任务的循环执行机制
 let nextUnitOfWork = null; // 全局变量，保存接下来需要执行的任务
+let wipRoot = null;
 function workLoop(deadline) {
   let shouldYield = false;
   while (nextUnitOfWork && !shouldYield) {
     nextUnitOfWork = performUnitOfWork(nextUnitOfWork);
     shouldYield = deadline.timeRemaining() < 1;
+  }
+  if (!nextUnitOfWork && wipRoot) {
+    commitRoot();
   }
   requestIdleCallback(workLoop);
 }
@@ -57,9 +62,6 @@ function performUnitOfWork(fiber) {
   // add dom node
   if (!fiber.dom) {
     fiber.dom = createDom(fiber);
-  }
-  if (fiber.parent) {
-    fiber.parent.dom.appendChild(fiber.dom);
   }
   // create new fibers
   const elements = fiber.props.children;
@@ -98,6 +100,10 @@ function performUnitOfWork(fiber) {
   return null;
 }
 
+function commitRoot() {
+  // TODO add nodes to dom
+}
+
 const Deact = {
   createElement,
   createTextElement,
@@ -112,15 +118,4 @@ const element = Deact.createElement(
 );
 
 const container = document.getElementById("root");
-
-// Deact.render(
-//   <div>
-//     <h1>
-//       <p></p>
-//       <a></a>
-//     </h1>
-//     <h2></h2>
-//   </div>,
-//   container
-// );
 Deact.render(element, container);
