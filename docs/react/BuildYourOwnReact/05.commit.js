@@ -51,6 +51,7 @@ function workLoop(deadline) {
     shouldYield = deadline.timeRemaining() < 1;
   }
   if (!nextUnitOfWork && wipRoot) {
+    debugger;
     commitRoot();
   }
   requestIdleCallback(workLoop);
@@ -101,7 +102,19 @@ function performUnitOfWork(fiber) {
 }
 
 function commitRoot() {
-  // TODO add nodes to dom
+  commitWork(wipRoot.child);
+  wipRoot = null;
+}
+
+function commitWork(fiber) {
+  if (!fiber) {
+    return;
+  }
+  const domParent = fiber.parent.dom;
+  domParent.appendChild(fiber.dom);
+  debugger;
+  commitWork(fiber.child);
+  commitWork(fiber.sibling);
 }
 
 const Deact = {

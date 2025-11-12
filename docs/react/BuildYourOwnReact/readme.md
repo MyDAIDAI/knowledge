@@ -453,3 +453,225 @@ function workLoop(deadline) {
   requestIdleCallback(workLoop);
 }
 ```
+
+在`commitRoot`中，使用`wipRoot`节点，该变量保存着对整个的`fiber`树的引用，递归调用将所有的节点从顶部深度优先遍历将整个树挂载在进入页面中
+
+```js
+function workLoop(deadline) {
+  let shouldYield = false;
+  while (nextUnitOfWork && !shouldYield) {
+    nextUnitOfWork = performUnitOfWork(nextUnitOfWork);
+    shouldYield = deadline.timeRemaining() < 1;
+  }
+  if (!nextUnitOfWork && wipRoot) {
+    commitRoot();
+  }
+  requestIdleCallback(workLoop);
+}
+
+function commitRoot() {
+  commtWork(wipRoot.child);
+  wipRoot = null;
+}
+
+function commitRoot() {
+  commtWork(wipRoot.child);
+  wipRoot = null;
+}
+
+function commitWork(fiber) {
+  if (!fiber) {
+    return;
+  }
+  const domParent = fiber.parent.dom;
+  domParent.appendChild(fiber.dom);
+  commitWork(fiber.child);
+  commitWork(fiber.sibling);
+}
+```
+
+## 第六步：`Reconciliation`
+
+到现在为止，我们只是添加内容到`DOM`中（因为只有第一次的挂载），但是如果需要更新或者删除节点呢
+
+那就是我们后面要做的事，我们需要去比较`render`函数内接收到的`element`元素，与我们最近一次提交到`DOM`上的元素
+
+因此我们需要在完成`commit`之后保存一个“最近提交的 fiber 树”的引用，将其称为`currentRoot`
+
+```js
+function render(element, container) {
+  wipRoot = {
+    dom: container,
+    props: {
+      children: [element],
+    },
+    alternate: currentRoot,
+  };
+  nextUnitOfWork = wipRoot;
+}
+```
+
+现在我们抽取`performUnitOfWork`中关于创建`new fiber`的相关代码到单独的函数中
+
+```js
+function performUnitOfWork(fiber) {
+  // other code...
+  const elements = fiber.props.children;
+  reconcileChildren(fiber, elements);
+  // other code...
+}
+
+function reconcileChildren(wipFiber, elements) {
+  let index = 0;
+  let prevSibling = null;
+  while (index < elements.length) {
+    const element = elements[index];
+    const newFiber = {
+      type: element.type,
+      props: element.props,
+      parent: wipFiber,
+      dom: null,
+    };
+    if (index === 0) {
+      wipFiber.child = newFiber;
+      newFiber.parent = wipFiber;
+    } else {
+      prevSibling.sibling = newFiber;
+      newFiber.parent = wipFiber;
+    }
+    prevSibling = newFiber;
+    index++;
+  }
+}
+```
+
+在这个函数中，我们将会用老的`fiber`与新的元素进行`reconcile`
+
+获取当前正在创建的`fiber`元素的`alternate`中的子元素（也就是最近一次已经提交到页面的`fiber`节点），与将要生成的元素进行比较，我们需要比较看是否有改变需要被应用到`DOM`中，我们使用`type`类型进行如下比较：
+
+- 比较类型是否相同，相同则复用原本的`DOM`节点，只需要更新相关属性即可
+
+```js
+function reconcileChildren(wipFiber, elements) {
+  let index = 0;
+  // fiber节点的第一个子节点
+  let oldFiber = wipFiber.alternate && wipFiber.alternate.child;
+  // 1. 如果老的`fiber`存在，则我们将会用新的元素与老的`fiber`进行比较
+  while (oldFiber !== null || index < elements.length) {
+    const element = elements[index];
+    const sameType = oldFiber && oldFiber.type === element.type;
+    // type类型想通过，意味着不需要创建新的dom节点，只需要复用老节点，更新对应属性就可以
+    if (sameType) {
+      newFiber = {
+        type: oldFiber.type,
+        props: element.props,
+        dom: oldFiber.dom,
+        parent: wipFiber,
+        alternate: oldFiber,
+        effectTag: "UPDATE", // 更新标识位
+      };
+    }
+    // 移动到下一个老的`fiber`节点
+    if (oldFiber) {
+      oldFiber = oldFiber.sibling;
+    }
+    index++;
+  }
+}
+```
+
+- 如果类型不同，并且存在新元素，那么创建新元素
+
+```js
+function reconcileChildren(wipFiber, elements) {
+  let index = 0;
+  // fiber节点的第一个子节点
+  let oldFiber = wipFiber.alternate && wipFiber.alternate.child;
+  // 1. 如果老的`fiber`存在，则我们将会用新的元素与老的`fiber`进行比较
+  while (oldFiber !== null || index < elements.length) {
+    const element = elements[index];
+    const sameType = oldFiber && oldFiber.type === element.type;
+    // 新的元素与老的`fiber`的类型不同，并且当前element存在，创建新的节点
+    if (element && !sameType) {
+      newFiber = {
+        type: element.type,
+        props: element.props,
+        dom: null,
+        parent: wipFiber,
+        alternate: null,
+        effectTag: "PLACEMENT", // 插入标识位
+      };
+    }
+    // 移动到下一个老的`fiber`节点
+    if (oldFiber) {
+      oldFiber = oldFiber.sibling;
+    }
+    index++;
+  }
+}
+```
+
+- 如果类型不同，旧的`fiber`节点存在，则删除旧节点
+
+```js
+function reconcileChildren(wipFiber, elements) {
+  let index = 0;
+  // fiber节点的第一个子节点
+  let oldFiber = wipFiber.alternate && wipFiber.alternate.child;
+  // 1. 如果老的`fiber`存在，则我们将会用新的元素与老的`fiber`进行比较
+  while (oldFiber !== null || index < elements.length) {
+    const element = elements[index];
+    const sameType = oldFiber && oldFiber.type === element.type;
+    // other code...
+    // 新的元素与老的`fiber`的类型不同，并且当前oldFiber存在，删除旧的节点
+    if (oldFiber && !sameType) {
+      oldFiber.effectTag = "DELETION";
+      deletions.push(oldFiber);
+    }
+    // 移动到下一个老的`fiber`节点
+    if (oldFiber) {
+      oldFiber = oldFiber.sibling;
+    }
+    index++;
+  }
+}
+```
+
+接下来需要修改`commitRoot`函数的内容，之前只有`append`的操作，也就是`PLACEMENT`的标识位操作，现在需要添加`UPDATE`以及`DELETION`
+
+```js
+function commitRoot() {
+  // 删除节点
+  deletions.forEach(commitWork);
+  commitWork(wipRoot.child);
+  currentRoot = wipRoot;
+  wipRoot = null;
+}
+```
+
+具体的`DOM`操作在`commitWork`执行：
+
+```js
+function commitWork(fiber) {
+  if (!fiber) {
+    return;
+  }
+  const domParent = fiber.parent.dom;
+  // 添加effect标识位处理
+  if (fiber.effectTag === "PLACEMENT" && fiber.dom !== null) {
+    // PLACEMENT：插入标识位
+    domParent.appendChild(fiber.dom);
+  } else if (fiber.effectTag === "UPDATE" && fiber.dom !== null) {
+    // UPDATE：更新标识位
+    updateDom(fiber.dom, fiber.alternate.props, fiber.props);
+  } else if (fiber.effectTag === "DELETION") {
+    // DELETION：删除标识位
+    domParent.removeChild(fiber.dom);
+  }
+  commitWork(fiber.child);
+  commitWork(fiber.sibling);
+}
+```
+
+其中`UPDATE`标识位需要对其属性进行更新，由于属性较多，需要进行比较遍历操作，所以将其封装在`updateDom`函数中，还需要对事件进行单独处理，这个我们在后期再进行[TODO]
+
