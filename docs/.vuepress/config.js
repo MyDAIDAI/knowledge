@@ -39,6 +39,7 @@ module.exports = {
           { title: "JSX", path: "/react/01.JSX.md" },
           { title: "Fiber", path: "/react/02.Fiber.md" },
           { title: "Bit", path: "/react/03.bit.md" },
+          { title: 'BuildYourOwnReact', path: "/react/BuildYourOwnReact/buildYourOwnReact.md" },
         ],
       },
       {
