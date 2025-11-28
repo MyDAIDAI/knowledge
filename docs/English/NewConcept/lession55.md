@@ -47,7 +47,7 @@ but sometimes he and his wife watch television.
 - Does Mr.Sawyer go to work in the morning? Do the children go to school?
 - when does Mr.Sawyer go to work? When do the children go to school?
 - What does Mr.Sawyer do in the morning? what do the children do in the morning?
-- who goes to work and who go to school in the morning?
+- who goes to work and who goes to school in the morning?
 
 **Their father takes them to school every day.**
 

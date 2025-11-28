@@ -38,7 +38,7 @@ module.exports = {
         children: [
           { title: "JSX", path: "/react/01.JSX.md" },
           { title: "Fiber", path: "/react/02.Fiber.md" },
-          { title: "Bit", path: "/react/03.Bit.md" },
+          { title: "Bit", path: "/react/03.bit.md" },
         ],
       },
       {
@@ -54,7 +54,7 @@ module.exports = {
         path: "/nextjs",
         collapsable: false, // 不折叠
         children: [
-          { title: "Fetching Data", path: "/nextjs/docs/Fetching Data.md" },
+          { title: "Fetching Data", path: "/nextjs/docs/05.Fetching Data.md" },
         ],
       },
       {
