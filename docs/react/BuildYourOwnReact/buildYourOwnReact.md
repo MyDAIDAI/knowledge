@@ -673,5 +673,60 @@ function commitWork(fiber) {
 }
 ```
 
-其中`UPDATE`标识位需要对其属性进行更新，由于属性较多，需要进行比较遍历操作，所以将其封装在`updateDom`函数中，还需要对事件进行单独处理，这个我们在后期再进行[TODO]
+其中`UPDATE`标识位需要对其属性进行更新，由于属性较多，需要进行比较遍历操作，所以将其封装在`updateDom`函数中，还需要对事件进行单独处理，下面是比较属性操作
 
+```js
+const isProperty = (key) => key !== "children";
+const isNew = (prev, next) => (key) => prev[key] !== next[key];
+const isGone = (prev, next) => (key) => !(key in next);
+function updateDom(dom, prevProps, nextProps) {
+  // remove old properties
+  Object.keys(prevProps)
+    .filter(isProperty)
+    .filter(isGone(prevProps, nextProps))
+    .forEach((name) => {
+      dom[name] = "";
+    });
+  // add new properties
+  Object.keys(nextProps)
+    .filter(isProperty)
+    .filter(isNew(prevProps, nextProps))
+    .forEach((name) => {
+      dom[name] = nextProps[name];
+    });
+}
+```
+
+一种特殊的属性为事件监听器，因此以`on`前缀开头的属性名我们都需要特殊处
+
+```js
+const isEvent = (key) => key.startsWith("on");
+const isProperty = (key) => key !== "children" && !isEvent(key);
+const isNew = (prev, next) => (key) => prev[key] !== next[key];
+function updateDom(dom, prevProps, nextProps) {
+  // remove old or changed event listeners
+  // old event listeners: !(key in nextProps)
+  // changed event listener: isNew(prevProps, nextProps)(key)
+  Object.keys(prevProps)
+    .filter(isEvent)
+    .filter((key) => !(key in nextProps) || isNew(prevProps, nextProps)(key))
+    .forEach((name) => {
+      const eventType = name.toLowerCase().substring(2);
+      dom.removeEventListener(eventType, prevProps[name]);
+    });
+  // add new or changed event listeners
+  Object.keys(nextProps)
+    .filter(isEvent)
+    .filter(isNew(prevProps, nextProps))
+    .forEach((name) => {
+      const eventType = name.toLowerCase().substring(2);
+      dom.addEventListener(eventType, nextProps[name]);
+    });
+  // remove old properties
+  // add new properties
+}
+```
+
+## 参考
+
+- [build your own react](https://pomb.us/build-your-own-react/)
