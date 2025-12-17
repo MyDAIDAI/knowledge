@@ -100,14 +100,14 @@ function performUnitOfWork(fiber) {
  */
 function reconcileChildren(wipFiber, elements) {
   let index = 0;
+  let prevSibling = null;
   // fiber节点的第一个子节点
   let oldFiber = wipFiber.alternate && wipFiber.alternate.child;
   // 1. 如果老的`fiber`存在，则我们将会用新的元素与老的`fiber`进行比较
   while (oldFiber !== null || index < elements.length) {
     const element = elements[index];
-    console.log("oldFiber", oldFiber);
-    console.log("element", element);
     const sameType = oldFiber && oldFiber.type === element.type;
+    let newFiber = null;
     // type类型想通过，意味着不需要创建新的dom节点，只需要复用老节点，更新对应属性就可以
     if (sameType) {
       newFiber = {
@@ -139,6 +139,12 @@ function reconcileChildren(wipFiber, elements) {
     if (oldFiber) {
       oldFiber = oldFiber.sibling;
     }
+    if (index === 0) {
+      wipFiber.child = newFiber;
+    } else {
+      prevSibling.sibling = newFiber;
+    }
+    prevSibling = newFiber;
     index++;
   }
 }

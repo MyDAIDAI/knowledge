@@ -727,6 +727,104 @@ function updateDom(dom, prevProps, nextProps) {
 }
 ```
 
+## 第七步：`Function Components`
+
+下面我们要做的事就是需要支持函数组件`Function Components`，将`JSX格式的函数式组件进行转换，就得到了如下代码结构：
+
+```js
+function App(props) {
+  return Deact.createElement("h1", null, "Hello, ", props.name);
+}
+const element = Deact.createElement(App, { name: "foo" });
+const container = document.getElementById("root");
+Deact.render(element, container);
+```
+
+函数式组件主要有两种不同的地方：
+
+- 从函数式组件创建的`fiber`节点没有对应的`dom`
+- 子节点来自于执行函数，而非其`props`中的`children`属性
+
+```js
+function performUnitOfWork(fiber) {
+  const isFunctionComponent = fiber.type instanceof Function;
+  if(isFunctionComponent) {
+    updateFunctionComponent(fiber);
+  } else {
+    updateHostComponent(fiber);
+  }
+  // return next fiber to work on
+  if(fiber.child) {
+    return fiber.child;
+  }
+  let nextFiber = fiber;
+  while(nextFiber) {
+    if(nextFiber.sibling) {
+      return nextFiber.sibling;
+    }
+    nextFiber = nextFiber.parent;
+  }
+  return null;
+}
+
+// 更新函数式组件
+function updateFunctionComponent(fiber) {
+  const children = [fiber.type(fiber.props)];
+  reconcileChildren(fiber, children);
+}
+// 更新宿主组件
+function updateHostComponent(fiber) {
+  if(!fiber.dom) {
+    fiber.dom = createDom(fiber);
+  }
+  const elements = fiber.props.children;
+  reconcileChildren(fiber, elements);
+}
+
+function App(props) {
+  return Deact.createElement("h1", null, "Hello, ", props.name);
+}
+```
+
+在`updateFunctionComponent`函数中，我们可以运行函数组件来获取其子节点，并将其属性作为参数值进行传入。如上面的`App`函数，在执行完成之后，会返回一个`h1`对应的元素节点。然后，一旦我们生成对应的`children`，我们就可以可以用同样的方式调用`reconcileChildren`函数
+
+除此之外，还需要做的一个改变就是，由于函数组件没有对应的`dom`属性，所以还需要修改`commitWork`函数
+
+```js
+function commitWork(fiber) {
+  if(!fiber) {
+    return;
+  }
+  let domParentFiber = fiber.parent;
+  while(!domParentFiber.dom) {
+    domParentFiber = domParentFiber.parent;
+  }
+  const domParent = domParentFiber.dom;
+  if (fiber.effectTag === "PLACEMENT" && fiber.dom !== null) {
+    // PLACEMENT：插入标识位
+    domParent.appendChild(fiber.dom);
+  } else if (fiber.effectTag === "UPDATE" && fiber.dom !== null) {
+    // UPDATE：更新标识位
+    updateDom(fiber.dom, fiber.alternate.props, fiber.props);
+  } else if (fiber.effectTag === "DELETION") {
+    // DELETION：删除标识位
+    commitDeletion(fiber, domParent);
+  }
+  commitWork(fiber.child);
+  commitWork(fiber.sibling);
+}
+
+function commitDeletion(fiber, domParent) {
+  if(fiber.dom) {
+    domParent.removeChild(fiber.dom);
+  } else {
+    commitDeletion(fiber.child, domParent)
+  }
+}
+```
+
+首先，由于函数组件没有其`dom`属性，所以需要向上层递归找到对应存在`dom`属性值的`fiber`节点，除此之外，删除节点需要递归将其函数组件下的所有节点进行删除
+
 ## 参考
 
 - [build your own react](https://pomb.us/build-your-own-react/)
