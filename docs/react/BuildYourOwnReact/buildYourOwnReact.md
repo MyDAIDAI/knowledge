@@ -825,6 +825,111 @@ function commitDeletion(fiber, domParent) {
 
 首先，由于函数组件没有其`dom`属性，所以需要向上层递归找到对应存在`dom`属性值的`fiber`节点，除此之外，删除节点需要递归将其函数组件下的所有节点进行删除
 
+## 第八步：`Hooks`
+
+最后一步，需要给函数组件添加状态。我们先添加一个典型的`Counter`组件，每次点击后，都会将状态值加1
+
+```js
+const Deact = {
+  createElement,
+  createTextElement,
+  render,
+  useState,
+};
+
+function Counter() {
+  const [state, setState] = Deact.useState(1);
+  return Deact.createElement("h1", null, "Count: ", state, Deact.createElement("button", { onClick: () => setState(c => c + 1) }, "Increment"));
+}
+const container = document.getElementById("root");
+const element = Deact.createElement(Counter);
+Deact.render(element, container);
+```
+
+可以看到我们直接调用了`Deact`对象的`useState`方法，所以需要在`Deact`对象中奖`useState`暴露出去。为了实现`useState`函数，需要做以下工作：
+
+1. 需要一个全局变量保存当前正在执行的`fiber`节点，以便将对应的`hook`信息挂载在上面
+2. 需要一个全局的`hook`的索引变量，使用该索引获取更新前`fiber`对应的`hook`，并以此获取其中的`state`值进行使用
+
+```js
+let wipFiber = null;
+let hookIndex = 0;
+// 更新函数式组件
+function updateFunctionComponent(fiber) {
+  wipFiber = fiber;
+  hookIndex = 0;
+  wipFiber.hooks = [];
+  const children = [fiber.type(fiber.props)];
+  reconcileChildren(fiber, children);
+}
+```
+
+在上面可以看到，在执行`updateFunctionComponent`函数中，将对应的变量进行了重置，并将`wipFiber.hooks`设置为一个数组，，然后会调用`fiber.type`进行执行，也就是执行函数组件，在函数组件内部执行时，会调用`useState`方法，每调用一次`useState`，就会向其中推入一个`hook`对象，该对象保存着状态值`state`以及更新队列`queue`，下面我们开始创建对应的`useState`方法
+
+```js
+function useState(initial) {
+  const oldHook =
+    wipFiber.alternate &&
+    wipFiber.alternate.hooks &&
+    wipFiber.alternate.hooks[hookIndex];
+  const hook = {
+    state: oldHook ? oldHook.state : initial,
+    queue: [],
+  };
+  const actions = oldHook ? oldHook.queue : [];
+  actions.forEach(action => {
+    hook.state = action(hook.state) || initial;
+  });
+  const setState = (action) => {
+    // some code...
+  }
+  wipFiber.hooks.push(hook);
+  hookIndex++;
+  return [hook.state, setState];
+}
+```
+
+可以看到上面的`useState`函数主要做了几件事：
+
+1. 通过`hookIndex`索引在`wipFiber.hooks`中取出对应的`oldHook`，也这就是为什么不能将`hook`写在条件语句中的原因，不同条件后，`hookIndex`所对应的`hook`对象不相同，会导致值更新错误
+2. 从`oldHook`中取出`state`以及`actions`，依次执行`action`函数，获得最新`hook.state`的值将其存入
+3. 创建`setState`函数，将`state`以`setState`函数一起传递刚给外部
+
+```js
+const setState = (action) => {
+  hook.queue.push(action);
+  // 复用当前currentRoot的dom以及props，并将当前页面渲染的fiber作为alternate属性
+  wipRoot = {
+    dom: currentRoot.dom,
+    props: currentRoot.props,
+    alternate: currentRoot,
+  };
+  // 设置下一个工作单元
+  nextUnitOfWork = wipRoot;
+  deletions = [];
+}
+```
+
+上面是`setState`的实现过程，每次调用该函数时，将传入的函数作为`action`，放入`hook`的更新队列`queue`中，并设置`wipRoot`以及`nextUnitOfWork`变量，由于代码中的`workLoop`函数在浏览器有空闲时间时一直循环执行的，可以看到控制台会一直打印下面的`workLoop`日志。
+
+```js
+function workLoop(deadline) {
+  console.log('workLoop', deadline, nextUnitOfWork);
+  let shouldYield = false;
+  while(nextUnitOfWork && !shouldYield) {
+    nextUnitOfWork = performUnitOfWork(nextUnitOfWork);
+    shouldYield = deadline.timeRemaining() < 1;
+  }
+  if(!nextUnitOfWork && wipRoot) {
+    commitRoot();
+  }
+  requestIdleCallback(workLoop);
+}
+requestIdleCallback(workLoop);
+```
+
+执行`workLoop`函数后，发现当前的`nextUnitOfWork`变量存在，则会继续向下执行`performUnitOfWork`函数，生成新的`fiber`树，重新执行函数组件以及`useState`函数，遍历`actions`生成最新的`state`来更新组件状态，并进行显示。
+
 ## 参考
 
 - [build your own react](https://pomb.us/build-your-own-react/)
