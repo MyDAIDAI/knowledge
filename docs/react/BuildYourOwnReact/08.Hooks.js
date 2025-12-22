@@ -229,6 +229,7 @@ function commitDeletion(fiber, domParent) {
 }
 
 
+// useState hook
 function useState(initial) {
   const oldHook =
     wipFiber.alternate &&
@@ -260,7 +261,7 @@ function useState(initial) {
   return [hook.state, setState];
 }
 
-
+// useEffect hook
 /**
  * 判断hook是否是effect hook
  * @param {*} hook 
@@ -337,6 +338,7 @@ function runEffectsRecursively(fiber) {
     runEffectsRecursively(fiber.sibling);
   }
 }
+// useMemo hook
 function isMemoHook(hook) {
   return hook !== null && typeof hook === 'object' && hook._tag === 'memo';
 }
@@ -368,6 +370,30 @@ function useMemo(factory, deps) {
   return hook.state;
 }
 
+// useCallback hook
+function isCallbackHook(hook) {
+  return hook !== null && typeof hook === 'object' && hook._tag === 'callback';
+}
+
+function useCallback(callback, deps) {
+  const oldHook = wipFiber.alternate && wipFiber.alternate.hooks && wipFiber.alternate.hooks[hookIndex];
+  const hook = {
+    _tag: 'callback',
+    deps,
+    state: callback,
+  }
+  if(oldHook && isCallbackHook(oldHook)) {
+    const hasDepsChange = !deps || !oldHook.deps || deps.length !== oldHook.deps.length || deps.some((dep, index) => dep !== oldHook.deps[index]);
+    if(!hasDepsChange) {
+      hook.state = oldHook.state;
+    }
+  }
+  wipFiber.hooks.push(hook);
+  hookIndex++;
+  return hook.state;
+}
+
+
 const Deact = {
   createElement,
   createTextElement,
@@ -375,6 +401,7 @@ const Deact = {
   useState,
   useEffect,
   useMemo,
+  useCallback,
 };
 
 function Counter() {
@@ -419,6 +446,11 @@ function Counter() {
     }
   }, [state]);
   console.log('data2', data2);
+
+  const cb1 = Deact.useCallback(() => {
+    console.log('useCallback called cb1');
+  }, []);
+  console.log('cb1', cb1);
  
   return Deact.createElement("h1", null, "Count: ", state, Deact.createElement("button", { onClick: () => setState(c => c + 1) }, "Increment"));
 }
