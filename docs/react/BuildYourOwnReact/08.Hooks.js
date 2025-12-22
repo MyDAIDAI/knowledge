@@ -28,7 +28,6 @@ let wipRoot = null;
 let nextUnitOfWork = null;
 let currentRoot = null;
 function workLoop(deadline) {
-  console.log('workLoop', deadline, nextUnitOfWork);
   let shouldYield = false;
   while(nextUnitOfWork && !shouldYield) {
     nextUnitOfWork = performUnitOfWork(nextUnitOfWork);
@@ -50,7 +49,6 @@ function render(element, container) {
     alternate: currentRoot,
   };
   nextUnitOfWork = wipRoot;
-  console.log('render', wipRoot);
 }
 
 function performUnitOfWork(fiber) {
@@ -82,7 +80,6 @@ function updateFunctionComponent(fiber) {
   hookIndex = 0;
   wipFiber.hooks = [];
   const children = [fiber.type(fiber.props)];
-  console.log('updateFunctionComponent', children);
   reconcileChildren(fiber, children);
 }
 // 更新宿主组件
@@ -96,6 +93,17 @@ function updateHostComponent(fiber) {
 }
 
 let deletions = [];
+/**
+ * 对比新旧fiber树，并更新对应的fiber节点
+ * @param {*} wipFiber 父fiber节点
+ * @param {*} elements 子元素
+ * 
+ * 1. 如果旧的fiber节点存在，则我们将会用新的元素与旧的fiber节点进行比较
+ * 2. 如果旧的fiber节点不存在，则我们将会用新的元素创建新的fiber节点
+ * 3. 如果新的元素与旧的fiber节点的类型相同，则我们将会用新的元素更新旧的fiber节点
+ * 4. 如果新的元素与旧的fiber节点的类型不同，则我们将会删除旧的fiber节点，并创建新的fiber节点
+ * 5. 如果新的元素与旧的fiber节点的类型相同，则我们将会用新的元素更新旧的fiber节点
+ */
 function reconcileChildren(wipFiber, elements) {
   let index = 0;
   let prevSibling = null;
@@ -182,6 +190,7 @@ function updateDom(dom, prevProps, nextProps) {
 function commitRoot() {
   deletions.forEach(commitWork);
   commitWork(wipRoot.child);
+  runEffectsRecursively(wipRoot.child);
   currentRoot = wipRoot;
   wipRoot = null;
   deletions = [];
@@ -228,16 +237,14 @@ function useState(initial) {
   const hook = {
     state: oldHook ? oldHook.state : initial,
     queue: [],
+    _tag: 'state',
   };
   const actions = oldHook ? oldHook.queue : [];
-  console.log('actions', actions);
   actions.forEach(action => {
     hook.state = action(hook.state) || initial;
-    console.log('hook.state', hook.state);
   });
   const setState = (action) => {
     hook.queue.push(action);
-    console.log('hook.queue', hook.queue);
     // 复用当前currentRoot的dom以及props
     wipRoot = {
       dom: currentRoot.dom,
@@ -249,21 +256,118 @@ function useState(initial) {
     deletions = [];
   }
   wipFiber.hooks.push(hook);
-  console.log('wipFiber.hooks', wipFiber.hooks);
   hookIndex++;
   return [hook.state, setState];
 }
 
+
+/**
+ * 判断hook是否是effect hook
+ * @param {*} hook 
+ * @returns {boolean} true if hook is effect hook, false otherwise
+ */
+function isEffectHook(hook) {
+  return hook !== null && typeof hook === 'object' && hook._tag === 'effect';
+}
+
+function useEffect(effect, deps) {
+  const oldHook =
+    wipFiber.alternate &&
+    wipFiber.alternate.hooks &&
+    wipFiber.alternate.hooks[hookIndex];
+  const hook = {
+    effect,
+    deps,
+    cleanup: undefined,
+    _tag: 'effect',
+    state:null,
+    queue: [],
+  }
+  if(oldHook && isEffectHook(oldHook)) {
+    const hasDepsChange = !deps || !oldHook.deps || deps.length !== oldHook.deps.length || deps.some((dep, index) => dep !== oldHook.deps[index]);
+    if(hasDepsChange) {
+      hook.cleanup = oldHook.cleanup;
+    } else {
+      // 没有依赖项改变，则直接复用旧的effect hook
+      // No change in deps, skip this effect
+      hook.cleanup = oldHook.cleanup;
+      hook.effect = oldHook.effect;
+    }
+  }
+  wipFiber.hooks.push(hook);
+  hookIndex++;
+}
+
+function shouldRunEffect(currentHook, previousHook) {
+  // If previousHook doesn't exist or its deps don't exist, run the effect
+  // If currentHook's deps don't exist, run the effect everytime
+  if(!previousHook || !previousHook.deps || !currentHook.deps) {
+    return true;
+  }
+  return currentHook.deps.some((dep, index) => dep !== previousHook.deps[index]);
+}
+
+function runEffectsRecursively(fiber) {
+  if(fiber.hooks && fiber.hooks.length > 0) {
+    const preFiber = fiber.alternate;
+
+    fiber.hooks.forEach((hook, index) => {
+      if(!isEffectHook(hook)) {
+        return;
+      }
+      const effectHook = hook;
+      const previousHook = preFiber && preFiber.hooks ? preFiber.hooks[index] : null;
+      const shouldRun = shouldRunEffect(effectHook, previousHook);
+      if(shouldRun && effectHook.cleanup) {
+        effectHook.cleanup();
+        effectHook.cleanup = undefined;
+      }
+      if(shouldRun) {
+        const cleanup = effectHook.effect();
+        if(cleanup && typeof cleanup === 'function') {
+          effectHook.cleanup = cleanup;
+        }
+      }
+    });
+  }
+  if(fiber.child) {
+    runEffectsRecursively(fiber.child);
+  }
+  if(fiber.sibling) {
+    runEffectsRecursively(fiber.sibling);
+  }
+}
 
 const Deact = {
   createElement,
   createTextElement,
   render,
   useState,
+  useEffect,
 };
 
 function Counter() {
   const [state, setState] = Deact.useState(1);
+  const [state2, setState2] = Deact.useState(2);
+  Deact.useEffect(() => {
+    console.log('no deps effect');
+    return () => {
+      console.log('no deps cleanup');
+    }
+  });
+  Deact.useEffect(() => {
+    console.log('deps effect state2', state2);
+    return () => {
+      console.log('deps cleanup state2', state2);
+    }
+  }, [state2]);
+  Deact.useEffect(() => {
+    console.log('effect', state);
+    return () => {
+      console.log('cleanup', state);
+    }
+  }, [state]);
+ 
   return Deact.createElement("h1", null, "Count: ", state, Deact.createElement("button", { onClick: () => setState(c => c + 1) }, "Increment"));
 }
 const container = document.getElementById("root");
