@@ -337,6 +337,36 @@ function runEffectsRecursively(fiber) {
     runEffectsRecursively(fiber.sibling);
   }
 }
+function isMemoHook(hook) {
+  return hook !== null && typeof hook === 'object' && hook._tag === 'memo';
+}
+
+function useMemo(factory, deps) {
+  const oldHook = wipFiber.alternate && wipFiber.alternate.hooks && wipFiber.alternate.hooks[hookIndex];
+  
+  const hook = {
+    _tag: 'memo',
+    deps,
+    factory,
+    state: null,
+  }
+  let value;
+  if(oldHook && isMemoHook(oldHook)){
+    const hasDepsChange = !deps || !oldHook.deps || deps.length !== oldHook.deps.length || deps.some((dep, index) => dep !== oldHook.deps[index]);
+    if(hasDepsChange) {
+      value = factory();
+    } else {
+      value = oldHook.state;
+    }
+  } else {
+    value = factory();
+  }
+  hook.state = value;
+
+  wipFiber.hooks.push(hook);
+  hookIndex++;
+  return hook.state;
+}
 
 const Deact = {
   createElement,
@@ -344,29 +374,51 @@ const Deact = {
   render,
   useState,
   useEffect,
+  useMemo,
 };
 
 function Counter() {
   const [state, setState] = Deact.useState(1);
   const [state2, setState2] = Deact.useState(2);
+
   Deact.useEffect(() => {
     console.log('no deps effect');
     return () => {
       console.log('no deps cleanup');
     }
   });
+
   Deact.useEffect(() => {
     console.log('deps effect state2', state2);
     return () => {
       console.log('deps cleanup state2', state2);
     }
   }, [state2]);
+
   Deact.useEffect(() => {
     console.log('effect', state);
     return () => {
       console.log('cleanup', state);
     }
   }, [state]);
+
+  const data1 = Deact.useMemo(() => {
+    console.log('useMemo called data1');
+    return {
+      name: 'John',
+      age: 30,
+    }
+  }, []);
+  console.log('data1', data1);
+
+  const data2 = Deact.useMemo(() => {
+    console.log('useMemo called data2');
+    return {
+      name: 'data2',
+      age: 30,
+    }
+  }, [state]);
+  console.log('data2', data2);
  
   return Deact.createElement("h1", null, "Count: ", state, Deact.createElement("button", { onClick: () => setState(c => c + 1) }, "Increment"));
 }
