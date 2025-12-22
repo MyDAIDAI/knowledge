@@ -393,6 +393,18 @@ function useCallback(callback, deps) {
   return hook.state;
 }
 
+function useRef(initialValue) {
+  const oldHook = wipFiber.alternate && wipFiber.alternate.hooks && wipFiber.alternate.hooks[hookIndex];
+  const hook = {
+    _tag: 'ref',
+    state: oldHook ? oldHook.state : { current: initialValue },
+  }
+
+  wipFiber.hooks.push(hook);
+  hookIndex++;
+  return hook.state;
+}
+
 
 const Deact = {
   createElement,
