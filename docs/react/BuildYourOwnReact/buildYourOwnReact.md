@@ -846,6 +846,8 @@ const element = Deact.createElement(Counter);
 Deact.render(element, container);
 ```
 
+### `useState`
+
 可以看到我们直接调用了`Deact`对象的`useState`方法，所以需要在`Deact`对象中奖`useState`暴露出去。为了实现`useState`函数，需要做以下工作：
 
 1. 需要一个全局变量保存当前正在执行的`fiber`节点，以便将对应的`hook`信息挂载在上面
@@ -929,6 +931,109 @@ requestIdleCallback(workLoop);
 ```
 
 执行`workLoop`函数后，发现当前的`nextUnitOfWork`变量存在，则会继续向下执行`performUnitOfWork`函数，生成新的`fiber`树，重新执行函数组件以及`useState`函数，遍历`actions`生成最新的`state`来更新组件状态，并进行显示。
+
+### `useEffect`
+
+`useEffect`是传入一个副作用函数，然后根据是否传入依赖值以及依赖值是否变化来判断该副作用函数是否执行。有以下几种情况
+
+- 没有传入依赖值`deps`，则每次执行组件函数也就是组件更新时都会执行
+- 传入一个空数组作为依赖值，那么只在第一次组件挂载时执行
+- 传入状态作为依赖值，则每次执行函数组件时会判断该依赖是否被更新，如果两次依赖值不同则更新
+- 副作用函数还可以返回一个`cleanup`函数，该函数会在下一次更新执行副作用函数之前执行
+
+也就是说，在使用`useEffect`时，是进行副作用函数以及依赖的收集，在完成`commit`阶段后才会从`wipRoot`节点开始深度遍历所有的`fiber`，找到里面的`hooks`，取出所有的`effect`函数来进行执行
+
+```js
+function useEffect(effect, deps) {
+  const oldHook =
+    wipFiber.alternate &&
+    wipFiber.alternate.hooks &&
+    wipFiber.alternate.hooks[hookIndex];
+  const hook = {
+    effect,
+    deps,
+    cleanup: undefined,
+    _tag: 'effect',
+    state:null,
+    queue: [],
+  }
+  if(oldHook && isEffectHook(oldHook)) {
+    const hasDepsChange = !deps || !oldHook.deps || deps.length !== oldHook.deps.length || deps.some((dep, index) => dep !== oldHook.deps[index]);
+    if(hasDepsChange) {
+      hook.cleanup = oldHook.cleanup;
+    } else {
+      // 没有依赖项改变，则直接复用旧的effect hook
+      // No change in deps, skip this effect
+      hook.cleanup = oldHook.cleanup;
+      hook.effect = oldHook.effect;
+    }
+  }
+  wipFiber.hooks.push(hook);
+  hookIndex++;
+}
+
+function shouldRunEffect(currentHook, previousHook) {
+  // If previousHook doesn't exist or its deps don't exist, run the effect
+  // If currentHook's deps don't exist, run the effect everytime
+  if(!previousHook || !previousHook.deps || !currentHook.deps) {
+    return true;
+  }
+  return currentHook.deps.some((dep, index) => dep !== previousHook.deps[index]);
+}
+
+function shouldRunEffect(currentHook, previousHook) {
+  // If previousHook doesn't exist or its deps don't exist, run the effect
+  // If currentHook's deps don't exist, run the effect everytime
+  if(!previousHook || !previousHook.deps || !currentHook.deps) {
+    return true;
+  }
+  return currentHook.deps.some((dep, index) => dep !== previousHook.deps[index]);
+}
+
+function runEffectsRecursively(fiber) {
+  if(fiber.hooks && fiber.hooks.length > 0) {
+    const preFiber = fiber.alternate;
+
+    fiber.hooks.forEach((hook, index) => {
+      if(!isEffectHook(hook)) {
+        return;
+      }
+      const effectHook = hook;
+      const previousHook = preFiber && preFiber.hooks ? preFiber.hooks[index] : null;
+      const shouldRun = shouldRunEffect(effectHook, previousHook);
+      // 需要执行副作用函数并且当前effectHook有保存上一次的cleaup函数
+      // 执行cleanup函数
+      if(shouldRun && effectHook.cleanup) {
+        effectHook.cleanup();
+        effectHook.cleanup = undefined;
+      }
+      if(shouldRun) {
+        // 执行副作用函数，收集cleanup函数以便下次调用
+        const cleanup = effectHook.effect();
+        if(cleanup && typeof cleanup === 'function') {
+          effectHook.cleanup = cleanup;
+        }
+      }
+    });
+  }
+  if(fiber.child) {
+    runEffectsRecursively(fiber.child);
+  }
+  if(fiber.sibling) {
+    runEffectsRecursively(fiber.sibling);
+  }
+}
+
+function commitRoot() {
+  deletions.forEach(commitWork);
+  commitWork(wipRoot.child);
+  // 提交阶段完成后进行副作用函数执行
+  runEffectsRecursively(wipRoot.child);
+  currentRoot = wipRoot;
+  wipRoot = null;
+  deletions = [];
+}
+```
 
 ## 参考
 
