@@ -2,8 +2,8 @@ function createElement(type, props, ...children) {
   return {
     type,
     props: {
-      ...props,
-      children: children.map((child) =>
+      ...(props || {}),
+      children: (children || []).map((child) =>
         typeof child == "object" ? child : createTextElement(child)
       ),
     },
@@ -79,7 +79,32 @@ function updateFunctionComponent(fiber) {
   wipFiber = fiber;
   hookIndex = 0;
   wipFiber.hooks = [];
-  const children = [fiber.type(fiber.props)];
+  
+  // 如果组件是 Provider，先设置 context 值
+  // 这样在渲染子组件时，useContext 就能访问到 context 值
+  if (fiber.type && fiber.type._context) {
+    const context = fiber.type._context;
+    const oldValue = context._currentValue;
+    const newValue = fiber.props.value;
+    
+    // 存储到 fiber 节点上，供 useContext 查找
+    if (!wipFiber.context) {
+      wipFiber.context = {};
+    }
+    wipFiber.context[context] = newValue;
+    
+    // 如果值改变了，标记 context 需要更新
+    // 实际的更新会在 commitRoot 完成后进行
+    console.log('updateFunctionComponent context', fiber, context, oldValue, newValue);
+    if (oldValue !== newValue) {
+      context._needsUpdate = true;
+      // 先更新当前值，供本次渲染使用
+      context._currentValue = newValue;
+    }
+  }
+  
+  const context = fiber.type && fiber.type._context;
+  const children = context ? context.Provider(fiber.props) : [fiber.type(fiber.props)];
   reconcileChildren(fiber, children);
 }
 // 更新宿主组件
@@ -88,7 +113,7 @@ function updateHostComponent(fiber) {
     fiber.dom = createDom(fiber);
     updateDom(fiber.dom, {}, fiber.props);
   }
-  const elements = fiber.props.children;
+  const elements = fiber.props?.children || [];
   reconcileChildren(fiber, elements);
 }
 
@@ -154,7 +179,7 @@ const isEvent = (key) => key.startsWith("on");
 const isProperty = (key) => key !== "children" && !isEvent(key);
 const isNew = (prev, next) => (key) => prev[key] !== next[key];
 const isGone = (prev, next) => (key) => !(key in next);
-function updateDom(dom, prevProps, nextProps) {
+function updateDom(dom, prevProps = {}, nextProps = {}) {
   // remove old or changed event listeners
   Object.keys(prevProps)
     .filter(isEvent)
@@ -191,9 +216,55 @@ function commitRoot() {
   deletions.forEach(commitWork);
   commitWork(wipRoot.child);
   runEffectsRecursively(wipRoot.child);
+  
+  // 检查是否有 context 需要更新（检查本次渲染的树）
+  const contextsToUpdate = [];
+  function collectContexts(fiber) {
+    if (!fiber) return;
+    
+    // 检查是否是 Provider 组件
+    if (fiber.type && fiber.type._context) {
+      const context = fiber.type._context;
+      if (context._needsUpdate && context._subscribers.size > 0) {
+        contextsToUpdate.push(context);
+        context._needsUpdate = false; // 重置标记
+      }
+    }
+    
+    collectContexts(fiber.child);
+    collectContexts(fiber.sibling);
+  }
+  collectContexts(wipRoot.child);
+  
+  const rootToCommit = wipRoot;
   currentRoot = wipRoot;
   wipRoot = null;
   deletions = [];
+  
+  console.log('commitRoot contextsToUpdate', contextsToUpdate);
+  // 如果有 context 更新，触发订阅者重新渲染
+  if (contextsToUpdate.length > 0 && rootToCommit && rootToCommit.dom) {
+    // 收集所有需要更新的订阅者
+    const subscribersToUpdate = new Set();
+    contextsToUpdate.forEach(context => {
+      context._subscribers.forEach(subscriber => {
+        if (subscriber) {
+          subscribersToUpdate.add(subscriber);
+        }
+      });
+    });
+    // 如果有订阅者需要更新，触发重新渲染
+    if (subscribersToUpdate.size > 0) {
+      // 从根节点重新渲染
+      wipRoot = {
+        dom: rootToCommit.dom,
+        props: rootToCommit.props,
+        alternate: rootToCommit,
+      };
+      nextUnitOfWork = wipRoot;
+      deletions = [];
+    }
+  }
 }
 
 function commitWork(fiber) {
@@ -221,6 +292,15 @@ function commitWork(fiber) {
 }
 
 function commitDeletion(fiber, domParent) {
+  // 清理 context 订阅
+  if (fiber.hooks) {
+    fiber.hooks.forEach(hook => {
+      if (hook._tag === 'context' && hook.context && hook.context._subscribers) {
+        hook.context._subscribers.delete(fiber);
+      }
+    });
+  }
+  
   if(fiber.dom) {
     domParent.removeChild(fiber.dom);
   } else {
@@ -242,7 +322,8 @@ function useState(initial) {
   };
   const actions = oldHook ? oldHook.queue : [];
   actions.forEach(action => {
-    hook.state = action(hook.state) || initial;
+    const fn = typeof action === 'function' ? action : () => { return action; };
+    hook.state = fn(hook.state) || initial;
   });
   const setState = (action) => {
     hook.queue.push(action);
@@ -405,6 +486,87 @@ function useRef(initialValue) {
   return hook.state;
 }
 
+// createContext hook
+function createContext(defaultValue) {
+  const context = {
+    _value: defaultValue, // 默认值
+    _currentValue: defaultValue, // Provider 提供的当前值
+    Provider: null,
+    Consumer: null,
+    _subscribers: new Set(), // 订阅者集合，存储所有使用该 context 的 fiber 节点
+    _needsUpdate: false, // 标记是否需要更新订阅者
+  };
+  
+  // Provider 组件
+  function Provider(props) {
+    return props.children;
+  }
+  // 标记 Provider 组件对应的 context，用于在 updateFunctionComponent 中识别
+  Provider._context = context;
+  context.Provider = Provider;
+  
+  // Consumer 组件（可选，通常使用 useContext）
+  context.Consumer = function Consumer(props) {
+    const value = useContext(context);
+    return props.children(value);
+  };
+  
+  return context;
+}
+
+// useContext hook
+function useContext(context) {
+  const oldHook =
+    wipFiber.alternate &&
+    wipFiber.alternate.hooks &&
+    wipFiber.alternate.hooks[hookIndex];
+  
+  // 向上遍历 fiber 树，查找最近的 Provider
+  let fiber = wipFiber;
+  let value = context._value; // 默认值
+  let providerFiber = null;
+  
+  while (fiber) {
+    console.log('useContext fiber', fiber);
+    // 检查当前 fiber 是否有 context 值
+    if (fiber.context && fiber.context[context] !== undefined) {
+      value = fiber.context[context];
+      providerFiber = fiber;
+      break;
+    }
+    fiber = fiber.parent;
+  }
+  
+  // 如果没有找到 Provider，使用 context 的当前值（可能是默认值或之前的值）
+  if (!providerFiber) {
+    value = context._currentValue;
+  }
+  
+  // 注册当前组件为订阅者
+  // 使用 alternate 中的 fiber（如果存在）来清理旧的订阅
+  const oldFiber = wipFiber.alternate;
+  if (oldFiber && oldFiber.hooks && oldFiber.hooks[hookIndex]) {
+    const oldContextHook = oldFiber.hooks[hookIndex];
+    if (oldContextHook && oldContextHook.context === context) {
+      // 移除旧的订阅（如果存在）
+      oldContextHook.context._subscribers.delete(oldFiber);
+    }
+  }
+  
+  // 添加新的订阅
+  context._subscribers.add(wipFiber);
+  
+  const hook = {
+    _tag: 'context',
+    state: value,
+    context: context,
+  }
+  
+  wipFiber.hooks.push(hook);
+  hookIndex++;
+  return value;
+}
+
 
 const Deact = {
   createElement,
@@ -414,6 +576,9 @@ const Deact = {
   useEffect,
   useMemo,
   useCallback,
+  useRef,
+  createContext,
+  useContext,
 };
 
 function Counter() {
@@ -466,6 +631,36 @@ function Counter() {
  
   return Deact.createElement("h1", null, "Count: ", state, Deact.createElement("button", { onClick: () => setState(c => c + 1) }, "Increment"));
 }
+// const container = document.getElementById("root");
+// const element = Deact.createElement(Counter);
+// Deact.render(element, container);
+
+
+// Context 更新示例
+const ThemeContext = Deact.createContext('light');
+console.log('ThemeContext', ThemeContext);
+
+// 使用 Provider，支持更新 context
+function ThemeApp() {
+  const [theme, setTheme] = Deact.useState('dark');
+  
+  return Deact.createElement(
+    ThemeContext.Provider,
+    { value: theme },
+    Deact.createElement('div', null,
+      Deact.createElement('div', null, Deact.createElement(ThemeChild)),
+      Deact.createElement('button', {
+        onClick: () => setTheme(theme === 'dark' ? 'light' : 'dark')
+      }, 'Toggle Theme')
+    )
+  );
+}
+
+// 使用 useContext，当 Provider 的 value 改变时会自动更新
+function ThemeChild() {
+  const theme = Deact.useContext(ThemeContext);
+  return Deact.createElement('div', null, `Current Theme: ${theme}`);
+}
 const container = document.getElementById("root");
-const element = Deact.createElement(Counter);
+const element = Deact.createElement(ThemeApp);
 Deact.render(element, container);
