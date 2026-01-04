@@ -264,7 +264,7 @@ requestIdleCallback(workLoop);
 
 ## 第四步：Fibers
 
-为了组织工作单元，我们需要一种数据结构（可以保存当前执行的上下文以及可以随时进行中断）：`fiber`树
+为了组织工作单元，我们需要一种数据结构（**可以保存当前执行的上下文以及可以随时进行中断**）：`fiber`树
 
 我们将针对每一个`element`都有一个对应的`fiber`，每一个`fiber`将成为一个工作单元
 
@@ -340,7 +340,7 @@ function render(element, container) {
 }
 ```
 
-然后，当浏览器准备好时，它将会调用过`workLoop`函数，然后将从`root`节点开始工作.
+然后，当浏览器准备好时，它将会调用`workLoop`函数，然后将从`root`节点开始工作.
 
 下面，我们需要来完`performUnitOfWork`函数，首先，我们创建一个新的`node`，并将其插入到`DOM`中。我们通过`fiber.dom`属性去会追踪其`DOM`的`node`节点
 
@@ -467,11 +467,6 @@ function workLoop(deadline) {
     commitRoot();
   }
   requestIdleCallback(workLoop);
-}
-
-function commitRoot() {
-  commtWork(wipRoot.child);
-  wipRoot = null;
 }
 
 function commitRoot() {
@@ -742,7 +737,7 @@ Deact.render(element, container);
 
 函数式组件主要有两种不同的地方：
 
-- 从函数式组件创建的`fiber`节点没有对应的`dom`
+- 从**函数式组件**创建的`fiber`节点没有对应的`dom`
 - 子节点来自于执行函数，而非其`props`中的`children`属性
 
 ```js
@@ -786,7 +781,7 @@ function App(props) {
 }
 ```
 
-在`updateFunctionComponent`函数中，我们可以运行函数组件来获取其子节点，并将其属性作为参数值进行传入。如上面的`App`函数，在执行完成之后，会返回一个`h1`对应的元素节点。然后，一旦我们生成对应的`children`，我们就可以可以用同样的方式调用`reconcileChildren`函数
+在`updateFunctionComponent`函数中，我们可以运行**函数组件来获取其子节点**，并将其属性作为参数值进行传入。如上面的`App`函数，在执行完成之后，会返回一个`h1`对应的元素节点。然后，一旦我们生成对应的`children`，我们就可以可以用同样的方式调用`reconcileChildren`函数
 
 除此之外，还需要做的一个改变就是，由于函数组件没有对应的`dom`属性，所以还需要修改`commitWork`函数
 
@@ -795,6 +790,7 @@ function commitWork(fiber) {
   if(!fiber) {
     return;
   }
+  // 向上层查找最近含有dom属性的fiber
   let domParentFiber = fiber.parent;
   while(!domParentFiber.dom) {
     domParentFiber = domParentFiber.parent;
