@@ -433,7 +433,7 @@ function useMemo(factory, deps) {
     factory,
     state: null,
   }
-  let value;
+  let valu
   if(oldHook && isMemoHook(oldHook)){
     const hasDepsChange = !deps || !oldHook.deps || deps.length !== oldHook.deps.length || deps.some((dep, index) => dep !== oldHook.deps[index]);
     if(hasDepsChange) {

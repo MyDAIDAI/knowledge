@@ -977,15 +977,6 @@ function shouldRunEffect(currentHook, previousHook) {
   return currentHook.deps.some((dep, index) => dep !== previousHook.deps[index]);
 }
 
-function shouldRunEffect(currentHook, previousHook) {
-  // If previousHook doesn't exist or its deps don't exist, run the effect
-  // If currentHook's deps don't exist, run the effect everytime
-  if(!previousHook || !previousHook.deps || !currentHook.deps) {
-    return true;
-  }
-  return currentHook.deps.some((dep, index) => dep !== previousHook.deps[index]);
-}
-
 function runEffectsRecursively(fiber) {
   if(fiber.hooks && fiber.hooks.length > 0) {
     const preFiber = fiber.alternate;
@@ -1024,10 +1015,59 @@ function commitRoot() {
   deletions.forEach(commitWork);
   commitWork(wipRoot.child);
   // 提交阶段完成后进行副作用函数执行
+  // When your component commits, React will run your setup function
   runEffectsRecursively(wipRoot.child);
   currentRoot = wipRoot;
   wipRoot = null;
   deletions = [];
+}
+```
+
+### `useMemo`
+
+`useMemo`可以缓存在重新渲染之间的计算结果，使用方式：`const cachedValue = useMemo(calculateValue, dependencies)`
+
+`Parameters`：
+
+- `calculateValue`：这是一个函数，返回你想要缓存的值，该函数应该是一个**存函数**，应该没有参数，可以返回任何类型的值。`React`将会在初次渲染的时候调用该函数。在接下来的渲染中，`React`将会返回相同的值，如果`dependencies`没有改变。否则，则就调用该函数，重新返回计算结果，并将其结果存储起来。
+- `dependencies`：在`calculateValue`函数中依赖的响应值列表。响应值包含`props`、`state`和所有在组件内部声明的变量以及函数。`React`将会使用`Object.is`函数来将其之前的每一个依赖值与现在进行比较。
+
+根据上面👆🏻使用方法可以得到下面的信息：
+
+- `useMemo`需要保存计算值以及依赖，判断前一次依赖与本次是否相同，不相同则重新对值进行计算
+- `useMemo`不会在依赖修改的时候触发重新渲染，只会在组件执行期间根据依赖项是否变化判断是否需要重新计算值
+
+```js
+// useMemo hook
+function isMemoHook(hook) {
+  return hook !== null && typeof hook === 'object' && hook._tag === 'memo';
+}
+
+function useMemo(factory, deps) {
+  const oldHook = wipFiber.alternate && wipFiber.alternate.hooks && wipFiber.alternate.hooks[hookIndex];
+  
+  const hook = {
+    _tag: 'memo',
+    deps,
+    factory,
+    state: null,
+  }
+  let valu
+  if(oldHook && isMemoHook(oldHook)){
+    const hasDepsChange = !deps || !oldHook.deps || deps.length !== oldHook.deps.length || deps.some((dep, index) => dep !== oldHook.deps[index]);
+    if(hasDepsChange) {
+      value = factory();
+    } else {
+      value = oldHook.state;
+    }
+  } else {
+    value = factory();
+  }
+  hook.state = value;
+
+  wipFiber.hooks.push(hook);
+  hookIndex++;
+  return hook.state;
 }
 ```
 
