@@ -1071,6 +1071,40 @@ function useMemo(factory, deps) {
 }
 ```
 
+### `useCallback`
+
+`useCallback`是一个`React`的`Hook`，它可以让你在组件重新渲染时缓存函数，使用方式为`useCallback(fn, dependencies)`
+
+使用`useCallback`缓存函数只在下面的场景中有价值：
+
+- 将缓存的函数作为一个`prop`传递给一个被`memo`包裹的组件。你想要在依赖值没有修改时跳过重新渲染。`Memozation`可以让组件只在依赖项改变时重新渲染
+- 缓存的函数被作为了其他`Hook`的依赖项。例如，另一个被`useCallback`包裹的函数依赖它或者在`useEffect`中使用了依赖了该函数
+
+```js
+// useCallback hook
+function isCallbackHook(hook) {
+  return hook !== null && typeof hook === 'object' && hook._tag === 'callback';
+}
+
+function useCallback(callback, deps) {
+  const oldHook = wipFiber.alternate && wipFiber.alternate.hooks && wipFiber.alternate.hooks[hookIndex];
+  const hook = {
+    _tag: 'callback',
+    deps,
+    state: callback,
+  }
+  if(oldHook && isCallbackHook(oldHook)) {
+    const hasDepsChange = !deps || !oldHook.deps || deps.length !== oldHook.deps.length || deps.some((dep, index) => dep !== oldHook.deps[index]);
+    if(!hasDepsChange) {
+      hook.state = oldHook.state;
+    }
+  }
+  wipFiber.hooks.push(hook);
+  hookIndex++;
+  return hook.state;
+}
+```
+
 ## 参考
 
 - [build your own react](https://pomb.us/build-your-own-react/)
