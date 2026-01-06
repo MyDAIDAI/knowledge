@@ -1105,6 +1105,219 @@ function useCallback(callback, deps) {
 }
 ```
 
+### `useContext`
+
+`useContext`是一个可以读取以及订阅上下文`context`的`hook`，使用时通常需要搭配`createContext`以及`Provider`一起使用，使用方式如下：
+
+```js
+// 创建上下文对象
+const ThemeContext = Deact.createContext('light');
+
+function ThemeApp() {
+  const [theme, setTheme] = Deact.useState('dark');
+  
+  return Deact.createElement(
+    ThemeContext.Provider,
+    { value: theme },
+    Deact.createElement('div', null,
+      Deact.createElement('div', null, Deact.createElement(ThemeChild)),
+      Deact.createElement('button', {
+        onClick: () => setTheme(theme === 'dark' ? 'light' : 'dark')
+      }, 'Toggle Theme')
+    )
+  );
+}
+
+function ThemeChild() {
+  const theme = Deact.useContext(ThemeContext);
+  return Deact.createElement('div', null, `Current Theme: ${theme}`);
+}
+```
+
+我们首先来看`createContext`做了什么，根据这个名称可以指定是创建一个上下文对象，对象里面至少需要包含`Provider`以及`Consumer`，这两个对象一个向子组件提供上下文，一个可以用来消费上下文
+
+```js
+// createContext hook
+function createContext(defaultValue) {
+  // 创建一个上下文对象
+  const context = {
+    _value: defaultValue, // 默认值
+    _currentValue: defaultValue, // Provider 提供的当前值
+    Provider: null,
+    Consumer: null,
+    _subscribers: new Set(), // 订阅者集合，存储所有使用该 context 的 fiber 节点
+    _needsUpdate: false, // 标记是否需要更新订阅者
+  };
+  
+  // Provider 组件
+  function Provider(props) {
+    return props.children;
+  }
+  // 标记 Provider 组件对应的 context，用于在 updateFunctionComponent 中识别
+  Provider._context = context;
+  context.Provider = Provider;
+  
+  // Consumer 组件（可选，通常使用 useContext）
+  context.Consumer = function Consumer(props) {
+    const value = useContext(context);
+    return props.children(value);
+  };
+  
+  return context;
+}
+```
+
+从上面可以看出，`Provider`本质就是一个函数组件，将其`props.children`属性返回进行子组件渲染。重点是将当前上下文对象`context`挂载在了`Provider._context`对象上，以便渲染的时候使用。
+
+接下来是`useContext`，根据前面的定义，使用该`hook`可以读取以及订阅传入的上下文对象
+
+```js
+// useContext hook
+function useContext(context) {
+  const oldHook =
+    wipFiber.alternate &&
+    wipFiber.alternate.hooks &&
+    wipFiber.alternate.hooks[hookIndex];
+  
+  // 向上遍历 fiber 树，查找最近的 Provider
+  let fiber = wipFiber;
+  let value = context._value; // 默认值
+  let providerFiber = null;
+  
+  // 从当前节点向上层遍历parent，查找最近的提供context对象的Provider
+  while (fiber) {
+    // 检查当前 fiber 是否有 context 值
+    if (fiber.context && fiber.context[context] !== undefined) {
+      value = fiber.context[context];
+      providerFiber = fiber;
+      break;
+    }
+    fiber = fiber.parent;
+  }
+  
+  // 如果没有找到 Provider，使用 context 的当前值（可能是默认值或之前的值）
+  if (!providerFiber) {
+    value = context._currentValue;
+  }
+  
+  
+  // 重点：为当前上下文添加对该fiber的订阅
+  context._subscribers.add(wipFiber);
+  
+  const hook = {
+    _tag: 'context',
+    state: value,
+    context: context,
+  }
+  
+  wipFiber.hooks.push(hook);
+  hookIndex++;
+  return value;
+}
+```
+
+从上面的代码可以看出做了两个重要的事：
+
+- 第一个是从当前`fiber`依次向上层查找包含该上下文`context`的`fiber`节点，那么该`fiber`就是具有上下文对象的`Provider`
+- 将该`fiber`添加到上下文的订阅中，以便状态值更新后会更新对应的`fiber`
+
+只完成上面两个函数还不足以实现该功能，在`useContext`函数中可以看到`Provider`对应的`fiberNode`中包含`context`属性，那么我们需要再`updateFunctionComponent`函数中添加对应的处理
+
+```js
+// 更新函数式组件
+function updateFunctionComponent(fiber) {
+  wipFiber = fiber;
+  hookIndex = 0;
+  wipFiber.hooks = [];
+  
+  // 如果组件是 Provider，先设置 context 值
+  // 这样在渲染子组件时，useContext 就能访问到 context 值
+  if (fiber.type && fiber.type._context) {
+    const context = fiber.type._context;
+    const oldValue = context._currentValue;
+    // Provider 组件的固定向其中传入value值，所以需要从props中获取
+    const newValue = fiber.props.value;
+    
+    // 存储到 fiber 节点上，供 useContext 查找
+    // 一个 fiber 节点上，可能有多个 context 对象
+    if (!wipFiber.context) {
+      wipFiber.context = {};
+    }
+    wipFiber.context[context] = newValue;
+    
+    // 如果值改变了，标记 context 需要更新
+    // 实际的更新会在 commitRoot 完成后进行
+    if (oldValue !== newValue) {
+      context._needsUpdate = true;
+      // 先更新当前值，供本次渲染使用
+      context._currentValue = newValue;
+    }
+  }
+  
+  const context = fiber.type && fiber.type._context;
+  const children = context ? context.Provider(fiber.props) : [fiber.type(fiber.props)];
+  reconcileChildren(fiber, children);
+}
+```
+
+在上面比较了`context`中值的是否变化，有变化则更新状态值并添加对应的标识符，接下来要做的就是在提交`commit`阶段，判断更新状态
+
+```js
+function commitRoot() {
+  deletions.forEach(commitWork);
+  commitWork(wipRoot.child);
+  runEffectsRecursively(wipRoot.child);
+  
+  // 检查是否有 context 需要更新（检查本次渲染的树）
+  const contextsToUpdate = [];
+  function collectContexts(fiber) {
+    if (!fiber) return;
+    
+    // 检查是否是 Provider 组件
+    if (fiber.type && fiber.type._context) {
+      const context = fiber.type._context;
+      if (context._needsUpdate && context._subscribers.size > 0) {
+        contextsToUpdate.push(context);
+        context._needsUpdate = false; // 重置标记
+      }
+    }
+    
+    collectContexts(fiber.child);
+    collectContexts(fiber.sibling);
+  }
+  collectContexts(wipRoot.child);
+  
+  const rootToCommit = wipRoot;
+  currentRoot = wipRoot;
+  wipRoot = null;
+  deletions = [];
+  
+  // 如果有 context 更新，触发订阅者重新渲染
+  if (contextsToUpdate.length > 0 && rootToCommit && rootToCommit.dom) {
+    // 收集所有需要更新的订阅者
+    const subscribersToUpdate = new Set();
+    contextsToUpdate.forEach(context => {
+      context._subscribers.forEach(subscriber => {
+        if (subscriber) {
+          subscribersToUpdate.add(subscriber);
+        }
+      });
+    });
+    // 如果有订阅者需要更新，触发重新渲染
+    if (subscribersToUpdate.size > 0) {
+      // 从根节点重新渲染
+      wipRoot = {
+        dom: rootToCommit.dom,
+        props: rootToCommit.props,
+        alternate: rootToCommit,
+      };
+      nextUnitOfWork = wipRoot;
+      deletions = [];
+    }
+  }
+}
+```
+
 ## 参考
 
 - [build your own react](https://pomb.us/build-your-own-react/)
