@@ -305,3 +305,128 @@ function shouldComponentUpdate(nextProps) {
 }
 // 如果状态可变，深层比较会非常昂贵
 ```
+
+## Using our Reducer
+
+让我们使用创建的`reducer`来获取一个新的状态
+
+```js
+const state0 = reducer(undefined, {
+  type: CREATE_NOTE
+});
+// the value of state 0
+{
+  nextNoteId: 2,
+  notes: {
+    1: {
+      id: 1,
+      content: ''
+    }
+  }
+}
+```
+
+在上面的状态初始化中，我们传递了一个`undefined`值作为初始状态值。`Redux`总是传递一个`undefined`作为初始变量，或者可以使用一个像这样的默认参数`state=initialState`。后面可以将前一个状态`previous state`继续传入`Redux`中
+
+```js
+const state1  = reducer(state0, {
+  type: UPDATE_NOTE,
+  id: 1,
+  content: 'Hello, world!'
+});
+// state1
+{
+  nextNoteId: 2,
+  notes: {
+    1: {
+      id: 1,
+      content: 'Hello, world!'
+    }
+  }
+}
+```
+
+我们可以按照下面的方式来使用状态，将其放置在`html`页面中，可以看到在页面中正确的渲染了该状态值。
+
+```js
+const CREATE_NOTE = 'CREATE_NOTE';
+const UPDATE_NOTE = 'UPDATE_NOTE';
+
+const initialState = {
+  nextNoteId: 1,
+  notes: {}
+};
+
+const reducer = (state = initialState, action) => {
+  switch (action.type) {
+    case CREATE_NOTE:
+      const id = state.nextNoteId;
+      const newNote = {
+        id,
+        content: ''
+      }
+      return {
+        ...state,
+        nextNoteId: id + 1,
+        notes: {
+          ...state.notes,
+          [id]: newNote
+        }
+      };
+    case UPDATE_NOTE:
+      const editedNote = {
+        ...state.notes[action.id],
+        content: action.content
+      }
+      return {
+        ...state,
+        notes: {
+          ...state.notes,
+          [action.id]: editedNote
+        }
+      };
+    default:
+      return state;
+  }
+};
+
+const state0 = reducer(undefined, {
+  type: CREATE_NOTE
+});
+console.log(state0);
+
+const state1 = reducer(state0, {
+  type: UPDATE_NOTE,
+  id: 1,
+  content: 'Hello, world!'
+});
+
+Deact.render(
+  Deact.createElement('div', null, JSON.stringify(state1)),
+  document.getElementById('root')
+);
+```
+
+`Redux`的核心本质上就是编写一段代码--一个简单的函数，它接受上一个状态和一个动作，并返回下一个状态。这个函数可以被直接嵌入`reduce`函数中，也就是为这什么这个函数被称为`reducer`的原因。
+
+```js
+const actions = [
+  { type: CREATE_NOTE },
+  { type: UPDATE_NOTE, id: 1, content: 'Hello, world!' },
+]
+const state2 = actions.reduce(reducer, undefined);
+console.log('state2', state2);
+
+// state2
+{
+  nextNoteId: 2,
+  notes: {
+    1: {
+      id: 1,
+      content: 'Hello, world!'
+    }
+  }
+}
+```
+
+可以看到上面两种方式使用`reducer`返回的状态值相同，这就是为什么`Redux`被称为是`JavaScript`应用程序的可预测状态容器了。输入相同的状态值以及`action`，最终会得到相同的状态。

@@ -1,25 +1,40 @@
-const createStore = (reducer) => {
-  let state;
-  let subscribers = [];
-  const store = {
-    getState: () => state,
-    dispatch: (action) => {
-      state = reducer(state, action);
-      subscribers.forEach(handler => handler());
-    },
-    subscribe: (handler) => {
-      subscribers.push(handler);
-      return () => {
-        const index = subscribers.indexOf(handler);
-        if (index !== -1) {
-          subscribers.splice(index, 1);
-        }
-      }
-    }
-  }
-  store.dispatch({type: '@@redux/INIT'});
-  return store;
-}
+// const CREATE_NOTE = 'CREATE_NOTE';
+// const UPDATE_NOTE = 'UPDATE_NOTE';
+
+// const initialState = {
+//   nextNoteId: 1,
+//   notes: {}
+// };
+
+// const reducer = (state = initialState, action) => {
+//   switch (action.type) {
+//     case CREATE_NOTE:
+//       // change the state
+//       return;
+//     case UPDATE_NOTE:
+//       // change the state
+//       return;
+//     default:
+//       return state;
+//   }
+// };
+
+// const handlers = {
+//   [CREATE_NOTE]: (state) => {
+//     return;
+//   },
+//   [UPDATE_NOTE]: (state) => {
+//     return;
+//   }
+// };
+
+// const reducer = (state = initialState, action) => {
+//   const handler = handlers[action.type];
+//   if (handler) {
+//     return handler(state, action);
+//   }
+//   return state;
+// };
 
 const CREATE_NOTE = 'CREATE_NOTE';
 const UPDATE_NOTE = 'UPDATE_NOTE';
@@ -31,12 +46,12 @@ const initialState = {
 
 const reducer = (state = initialState, action) => {
   switch (action.type) {
-    case CREATE_NOTE: {
+    case CREATE_NOTE:
       const id = state.nextNoteId;
       const newNote = {
         id,
         content: ''
-      };
+      }
       return {
         ...state,
         nextNoteId: id + 1,
@@ -45,33 +60,41 @@ const reducer = (state = initialState, action) => {
           [id]: newNote
         }
       };
-    }
-    case UPDATE_NOTE: {
-      const {id, content} = action;
+    case UPDATE_NOTE:
       const editedNote = {
-        ...state.notes[id],
-        content
-      };
+        ...state.notes[action.id],
+        content: action.content
+      }
       return {
         ...state,
         notes: {
           ...state.notes,
-          [id]: editedNote
+          [action.id]: editedNote
         }
       };
-    }
     default:
       return state;
   }
 };
 
-const store = createStore(reducer);
-console.log('store', store);
+const state0 = reducer(undefined, {
+  type: CREATE_NOTE
+});
+console.log(state0);
 
-store.subscribe(() => {
-  console.log('state changed', store.getState());
-  Deact.render(Deact.createElement('div', { id: 'root' }, Deact.createElement('h1', null, store.getState().notes[1].content)), document.getElementById('root'));
+const state1 = reducer(state0, {
+  type: UPDATE_NOTE,
+  id: 1,
+  content: 'Hello, world!'
 });
 
-store.dispatch({type: CREATE_NOTE});
-store.dispatch({type: UPDATE_NOTE, id: 1, content: 'Hello, world!'});
+const actions = [
+  { type: CREATE_NOTE },
+  { type: UPDATE_NOTE, id: 1, content: 'Hello, world!' },
+]
+const state2 = actions.reduce(reducer, undefined);
+
+Deact.render(
+  Deact.createElement('div', null, JSON.stringify(state2)),
+  document.getElementById('root')
+);
