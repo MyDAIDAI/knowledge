@@ -430,3 +430,76 @@ console.log('state2', state2);
 ```
 
 可以看到上面两种方式使用`reducer`返回的状态值相同，这就是为什么`Redux`被称为是`JavaScript`应用程序的可预测状态容器了。输入相同的状态值以及`action`，最终会得到相同的状态。
+
+## The Store
+
+现在我们来创建一个存储器`store`，使用闭包的方式将状态值以及`reducer`保存在函数的局部作用域中，避免变量污染。存储器还提供修改状态的方法`dispatch`以及获取状态的方法`getState`。通过这个方式可以简化状态修改的使用，并且避免直接修改状态值，必须使用`dispatch`方法来进行修改，方便后期对状态修改进行回溯。
+
+```js
+const createStore = (reducer) => {
+  let state = undefined;
+  return {
+    dispatch: (action) => {
+      state = reducer(state, action);
+    },
+    getState: () => {
+      return state;
+    }
+  }
+}
+const store = createStore(reducer);
+store.dispatch({ type: CREATE_NOTE });
+store.dispatch({ type: UPDATE_NOTE, id: 1, content: 'Hello, world!' });
+console.log('store.getState()', store.getState());
+```
+
+使用上面的方式，我们可以拥有一个能使用任意`reducer`来管理状态的存储库。但是上面的`store`缺少一个关键的功能，就是当修改后，使用该状态的组件不能及时更新。也就是缺少**订阅状态变更的机制**。如果不使用该机制，而是使用命令方式进行更新的话，是非常不友好的。
+
+```js
+const createStore = (reducer) => {
+  let state = undefined;
+  const subscribers = [];
+  const store = {
+    dispatch: (action) => {
+      state = reducer(state, action);
+      subscribers.forEach(handler => handler());
+    },
+    getState: () => {
+      return state;
+    },
+    subscribe: handler => {
+      subscribers.push(handler);
+      return () => {
+        const newIndex = subscribers.indexOf(handler)
+        if(newIndex > -1) {
+          subscribers.splice(newIndex, 1);
+        }
+      }
+    }
+  };
+  // 传入一个任意类型的action，来初始化状态
+  store.dispatch({type: '@@redux/INIT'});
+  return store;
+}
+
+const store = createStore(reducer);
+
+// 初始化渲染
+Deact.render(
+  Deact.createElement('div', null, JSON.stringify(store.getState())),
+  document.getElementById('root')
+);
+store.subscribe(() => {
+  console.log('subscribe', store.getState());
+  Deact.render(
+    Deact.createElement('div', null, JSON.stringify(store.getState())),
+    document.getElementById('root')
+  );
+});
+
+setTimeout(() => {
+  store.dispatch({ type: UPDATE_NOTE, id: 1, content: 'Hello, world!' });
+}, 2000);
+```
+
+将上面的代码渲染在页面上，可以看到在初始化渲染完成之后，使用定时器在2000毫秒之后修改状态值，页面也更新为了最新的状态值。

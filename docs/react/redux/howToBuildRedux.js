@@ -77,24 +77,69 @@ const reducer = (state = initialState, action) => {
   }
 };
 
-const state0 = reducer(undefined, {
-  type: CREATE_NOTE
-});
-console.log(state0);
+// const state0 = reducer(undefined, {
+//   type: CREATE_NOTE
+// });
+// console.log(state0);
 
-const state1 = reducer(state0, {
-  type: UPDATE_NOTE,
-  id: 1,
-  content: 'Hello, world!'
-});
+// const state1 = reducer(state0, {
+//   type: UPDATE_NOTE,
+//   id: 1,
+//   content: 'Hello, world!'
+// });
 
-const actions = [
-  { type: CREATE_NOTE },
-  { type: UPDATE_NOTE, id: 1, content: 'Hello, world!' },
-]
-const state2 = actions.reduce(reducer, undefined);
+// const actions = [
+//   { type: CREATE_NOTE },
+//   { type: UPDATE_NOTE, id: 1, content: 'Hello, world!' },
+// ]
+// const state2 = actions.reduce(reducer, undefined);
 
+// Deact.render(
+//   Deact.createElement('div', null, JSON.stringify(state2)),
+//   document.getElementById('root')
+// );
+
+const createStore = (reducer) => {
+  let state = undefined;
+  const subscribers = [];
+  const store = {
+    dispatch: (action) => {
+      state = reducer(state, action);
+      subscribers.forEach(handler => handler());
+    },
+    getState: () => {
+      return state;
+    },
+    subscribe: handler => {
+      subscribers.push(handler);
+      return () => {
+        const newIndex = subscribers.indexOf(handler)
+        if(newIndex > -1) {
+          subscribers.splice(newIndex, 1);
+        }
+      }
+    }
+  };
+  // 传入一个任意类型的action，来初始化状态
+  store.dispatch({type: '@@redux/INIT'});
+  return store;
+}
+
+const store = createStore(reducer);
+
+// 初始化渲染
 Deact.render(
-  Deact.createElement('div', null, JSON.stringify(state2)),
+  Deact.createElement('div', null, JSON.stringify(store.getState())),
   document.getElementById('root')
 );
+store.subscribe(() => {
+  console.log('subscribe', store.getState());
+  Deact.render(
+    Deact.createElement('div', null, JSON.stringify(store.getState())),
+    document.getElementById('root')
+  );
+});
+
+setTimeout(() => {
+  store.dispatch({ type: UPDATE_NOTE, id: 1, content: 'Hello, world!' });
+}, 2000);
