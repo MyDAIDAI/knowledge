@@ -503,3 +503,54 @@ setTimeout(() => {
 ```
 
 将上面的代码渲染在页面上，可以看到在初始化渲染完成之后，使用定时器在2000毫秒之后修改状态值，页面也更新为了最新的状态值。
+
+## Bring Your own Components
+
+一般情况下，我们只需要使用过组件内部的状态，那么什么时候需要使用`Redux`状态库呢？只需要考虑下面的问题：
+> 状态是否需要在组件卸载之后继续存在
+如果上面的答案是否定的，那么组件状态可能是最合适的选择。对于需要持久化到服务器或者需要在多个独立挂载和卸载的组件之间共享的状态，那么使用`Redux`可能是更好的选择。
+
+```js
+const NoteApp = function(props) {
+  console.log('NoteApp', props);
+  const len = Object.keys(props.notes).length;
+
+  const notes = len > 0 ? Object.keys(props.notes).map(id => (
+    Deact.createElement('li', { key: id }, props.notes[id].content)
+  )) : [];
+  return Deact.createElement('div', null,
+    Deact.createElement('ul', null, ...notes),
+    Deact.createElement('button', { onClick: props.onAddNote }, 'Add Note')
+  );
+}
+
+const NoteContainer = function(props) {
+  const [state, setState] = Deact.useState(props.store.getState());
+  console.log('NoteContainer', state);
+
+  Deact.useEffect(() => {
+    console.log('useEffect', props.store.getState());
+    const unsubscribe = props.store.subscribe(() => {
+      console.log('callback subscribe', props.store.getState());
+      setState(() => { 
+        console.log('setState', props.store.getState());
+        return props.store.getState();
+      });
+    });
+    return () => {
+      unsubscribe();
+    };
+  }, [props.store.getState()]);
+
+  const onAddNote = () => {
+    props.store.dispatch({ type: CREATE_NOTE });
+    console.log('onAddNote', props.store.getState());
+  };
+  return Deact.createElement(NoteApp, { notes: state.notes, onAddNote });
+}
+
+const store = createStore(reducer);
+Deact.render(Deact.createElement(NoteContainer, { store }), document.getElementById('root'));
+```
+
+在上面实现组件实现中，我们将状态值`state`作为属性值传入组件，子组件可以对其值进行渲染，但是我们可以注意到`NoteContainer`组件没有实际的作用，它的主要作用是添加状态值，以及对状态值进行`subscribe`、`unsubscribe`操作。如果我们使用的每个组件都需要使用`container`进行包裹的话，无疑是很麻烦的。我们接下来需要解决这个问题...
