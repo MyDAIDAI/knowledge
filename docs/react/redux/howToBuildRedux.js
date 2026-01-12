@@ -164,15 +164,19 @@ const NoteContainer = function(props) {
 
   // 注意📢：这个地方的useEffect加不加依赖值的问题
   // TODO: 2026-01-08 23:05 需要再研究下加不加依赖值的区别
+  // TODO: 2026-01-12 09:24 需要对比下原生react的下的实现方式
   Deact.useEffect(() => {
     console.log('useEffect', props.store.getState());
-    props.store.subscribe(() => {
+    const unsubscribe = props.store.subscribe(() => {
       console.log('callback subscribe', props.store.getState());
       setState(() => { 
         console.log('setState', props.store.getState());
         return props.store.getState();
       });
     });
+    return () => {
+      unsubscribe();
+    };
   }, [props.store.getState()]);
 
   const onAddNote = () => {
@@ -181,6 +185,74 @@ const NoteContainer = function(props) {
   };
   return Deact.createElement(NoteApp, { notes: state.notes, onAddNote });
 }
-
 const store = createStore(reducer);
-Deact.render(Deact.createElement(NoteContainer, { store }), document.getElementById('root'));
+// Deact.render(Deact.createElement(NoteContainer, { store }), document.getElementById('root'));
+
+
+const StoreContext = Deact.createContext(null);
+
+const Connect = (mapStateToProps, mapDispatchToProps) => {
+  return (WrappedComponent) => {
+    return function(props) {
+      const store = Deact.useContext(StoreContext);
+      console.log('Connect', store.getState());
+      
+      // 使用 useRef 保存最新的 props 和映射函数，以便在订阅回调中使用
+      const propsRef = Deact.useRef(props);
+      const mapStateToPropsRef = Deact.useRef(mapStateToProps);
+      const mapDispatchToPropsRef = Deact.useRef(mapDispatchToProps);
+      
+      // 更新 ref 的值，确保订阅回调中总是使用最新的值
+      propsRef.current = props;
+      mapStateToPropsRef.current = mapStateToProps;
+      mapDispatchToPropsRef.current = mapDispatchToProps;
+      
+      // 计算当前的 props
+      const currentState = store.getState();
+      const stateProps = mapStateToProps(currentState, props);
+      const dispatchProps = mapDispatchToProps(store.dispatch, props);
+      console.log('stateProps', stateProps);
+      console.log('dispatchProps', dispatchProps);
+      
+      // 使用 useState 来存储一个强制更新的计数器
+      // 当 store 变化时，递增计数器，触发组件重新渲染
+      const [updateCount, setUpdateCount] = Deact.useState(0);
+
+      // 订阅 store 的变化
+      Deact.useEffect(() => {
+        const unsubscribe = store.subscribe(() => {
+          // 当 store 变化时，强制组件重新渲染
+          // 在重新渲染时，会重新计算 stateProps 和 dispatchProps
+          console.log('store changed, forcing update');
+          setUpdateCount(prev => prev + 1);
+        });
+        return () => {
+          unsubscribe();
+        };
+      }, []); // 空依赖数组，只在组件挂载时订阅一次
+
+      // 每次渲染时，重新计算并直接传递给子组件
+      const mergedProps = { ...stateProps, ...dispatchProps };
+      console.log('mergedProps', mergedProps);
+
+      return Deact.createElement(WrappedComponent, {...mergedProps});
+    }
+  }
+}
+const mapStateToProps = (state) => {
+  return {
+    notes: state.notes,
+    openNoteId: state.openNoteId
+  }
+}
+const mapDispatchToProps = (dispatch) => {
+  return {
+    onAddNote: () => dispatch({ type: CREATE_NOTE }),
+    onOpenNote: (id) => dispatch({ type: OPEN_NOTE, id }),
+    onCloseNote: () => dispatch({ type: CLOSE_NOTE }),
+  }
+}
+const NoteAppContainer = Connect(mapStateToProps, mapDispatchToProps)(NoteApp);
+console.log('NoteAppContainer', NoteAppContainer);
+Deact.render(Deact.createElement(StoreContext.Provider, { value: store }, Deact.createElement(NoteAppContainer)), document.getElementById('root'));
+

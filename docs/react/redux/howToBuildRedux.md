@@ -554,3 +554,96 @@ Deact.render(Deact.createElement(NoteContainer, { store }), document.getElementB
 ```
 
 在上面实现组件实现中，我们将状态值`state`作为属性值传入组件，子组件可以对其值进行渲染，但是我们可以注意到`NoteContainer`组件没有实际的作用，它的主要作用是添加状态值，以及对状态值进行`subscribe`、`unsubscribe`操作。如果我们使用的每个组件都需要使用`container`进行包裹的话，无疑是很麻烦的。我们接下来需要解决这个问题...
+
+## `Provider and Connect`
+
+上面的试实现可以使用，但是仍然有一些问题：
+
+- 需要创建重复的`container`容器代码
+- 每次想要用`store`与某个组件链接的时候，都必须使用全局`store`对象，或者我们需要将`store`属性传递给整个组件树，这种写法在大型应用中不是理想的.
+
+那就是为什么我们需要使用`React Redux`中的`Provider`和`connect`。
+
+```js
+const Provider = function(props) {
+  return Deact.createElement(Deact.Provider, 
+    { value: props.store },
+    props.children
+  );
+}
+```
+
+上面的`Provider`组件利用了`React`的上下文功能，将`store`转换为上下文`context`属性。上下文`context`是一种将信息从顶层组件传毒给子组件的方式，中间组件无需显式传递属性。`Provider`只提供了状态的传递，我们还需要一个组件来实现状态值改变的订阅等操作.
+
+```js
+const StoreContext = Deact.createContext(null);
+
+const Connect = (mapStateToProps, mapDispatchToProps) => {
+  return (WrappedComponent) => {
+    return function(props) {
+      const store = Deact.useContext(StoreContext);
+      
+      // 使用 useRef 保存最新的 props 和映射函数，以便在订阅回调中使用
+      const propsRef = Deact.useRef(props);
+      const mapStateToPropsRef = Deact.useRef(mapStateToProps);
+      const mapDispatchToPropsRef = Deact.useRef(mapDispatchToProps);
+      
+      // 更新 ref 的值，确保订阅回调中总是使用最新的值
+      propsRef.current = props;
+      mapStateToPropsRef.current = mapStateToProps;
+      mapDispatchToPropsRef.current = mapDispatchToProps;
+      
+      // 计算当前的 props
+      const currentState = store.getState();
+      const stateProps = mapStateToProps(currentState, props);
+      const dispatchProps = mapDispatchToProps(store.dispatch, props);
+      
+      // 使用 useState 来存储一个强制更新的计数器
+      // 当 store 变化时，递增计数器，触发组件重新渲染
+      const [updateCount, setUpdateCount] = Deact.useState(0);
+
+      // 订阅 store 的变化
+      Deact.useEffect(() => {
+        const unsubscribe = store.subscribe(() => {
+          setUpdateCount(prev => prev + 1);
+        });
+        return () => {
+          unsubscribe();
+        };
+      }, []);
+
+      // 每次渲染时，重新计算并直接传递给子组件
+      const mergedProps = { ...stateProps, ...dispatchProps };
+
+      return Deact.createElement(WrappedComponent, {...mergedProps});
+    }
+  }
+}
+const mapStateToProps = (state) => {
+  return {
+    notes: state.notes,
+    openNoteId: state.openNoteId
+  }
+}
+const mapDispatchToProps = (dispatch) => {
+  return {
+    onAddNote: () => dispatch({ type: CREATE_NOTE }),
+    onOpenNote: (id) => dispatch({ type: OPEN_NOTE, id }),
+    onCloseNote: () => dispatch({ type: CLOSE_NOTE }),
+  }
+}
+const NoteAppContainer = Connect(mapStateToProps, mapDispatchToProps)(NoteApp);
+console.log('NoteAppContainer', NoteAppContainer);
+Deact.render(
+  Deact.createElement(
+    StoreContext.Provider, 
+    { 
+      value: store 
+    }, 
+    Deact.createElement(NoteAppContainer)
+  ), 
+  document.getElementById('root')
+);
+```
+
+在上面的代码中，实现了一个`Connect`组件，向该函数传入两个映射函数，一个将`state`映射为`props`中的属性，一个将`dispatch`映射为`props`中的方法，然后传入一个需要被包裹的组件，执行完成后会返回一个组件函数，在该函数内有被映射的属性以及方法，还有最重要的就是，对`store`修改添加订阅更新事件`subscribe`
