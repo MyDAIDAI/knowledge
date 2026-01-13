@@ -99,18 +99,22 @@ const reducer = (state = initialState, action) => {
 //   document.getElementById('root')
 // );
 
-const createStore = (reducer) => {
+const createStore = (reducer, middleware) => {
   let state = undefined;
   const subscribers = [];
+
+  const coreDispatch = (action) => {
+    state = reducer(state, action);
+    subscribers.forEach(handler => handler());
+  }
+
+  const getState = () => {
+    return state;
+  }
+
   const store = {
-    dispatch: (action) => {
-      state = reducer(state, action);
-      console.log('state', state);
-      subscribers.forEach(handler => handler());
-    },
-    getState: () => {
-      return state;
-    },
+    dispatch: coreDispatch,
+    getState,
     subscribe: handler => {
       subscribers.push(handler);
       console.log('subscribe', subscribers);
@@ -122,8 +126,18 @@ const createStore = (reducer) => {
       }
     }
   };
+
+  if(middleware) {
+    const dispatch = action => store.dispatch(action);
+    store.dispatch = middleware({
+      dispatch,
+      getState
+    })(coreDispatch);
+    console.log('store.dispatch', store.dispatch);
+  }
+
   // 传入一个任意类型的action，来初始化状态
-  store.dispatch({type: '@@redux/INIT'});
+  coreDispatch({type: '@@redux/INIT'});
   return store;
 }
 
@@ -185,8 +199,39 @@ const NoteContainer = function(props) {
   };
   return Deact.createElement(NoteApp, { notes: state.notes, onAddNote });
 }
-const store = createStore(reducer);
+
+
+
+const delayMiddleware = ({dispatch}) => coreDispatch => action => {
+  console.log('delayMiddleware dispatch', dispatch);
+  console.log('delayMiddleware', action, coreDispatch);
+  coreDispatch(action);
+};
+
+const loggingMiddleware = ({getState}) => coreDispatch => action => {
+  console.info('before', getState());
+  console.info('action', action, coreDispatch);
+  const result = coreDispatch(action);
+  console.info('after', getState());
+  return result;
+};
+
+const applyMiddleware = (...middlewares) => store => {
+  if (middlewares.length === 0) {
+    return (next) => next;
+  }
+  const chain = middlewares.map(middleware => middleware(store));
+  console.log('chain', chain);
+  const result = (next) => chain.reduce((a, b) => {
+    console.log('applyMiddleware', a, b, b(next), a(b(next)));
+    return a(b(next));
+  });
+  console.log('result', result);
+  return result;
+};
+const store = createStore(reducer, applyMiddleware(delayMiddleware, loggingMiddleware));
 // Deact.render(Deact.createElement(NoteContainer, { store }), document.getElementById('root'));
+
 
 
 const StoreContext = Deact.createContext(null);
