@@ -647,3 +647,69 @@ Deact.render(
 ```
 
 在上面的代码中，实现了一个`Connect`组件，向该函数传入两个映射函数，一个将`state`映射为`props`中的属性，一个将`dispatch`映射为`props`中的方法，然后传入一个需要被包裹的组件，执行完成后会返回一个组件函数，在该函数内有被映射的属性以及方法，还有最重要的就是，对`store`修改添加订阅更新事件`subscribe`
+
+## Middleware
+
+我们在前面构建了一个很不错的东西，但是缺失了比较重要的部分。有时候，我们需要与服务器端进行通信，但是现在的操作是同步的，如何实现异步操作呢？答案就是在分发操作和状态变更之间插入中间件。
+
+```js
+const createStore = (reducer, middleware) => {
+  let state;
+  const subscribers = [];
+  const coreDispatch = action => {
+    validateAction(action);
+    state = reducer(state, action);
+    subscribers.forEach(handler => handler());
+  };
+  const getState = () => state;
+  const store = {
+    dispatch: coreDispatch,
+    getState,
+    subscribe: handler => {
+      subscribers.push(handler);
+      return () => {
+        const index = subscribers.indexOf(handler)
+        if (index > 0) {
+          subscribers.splice(index, 1);
+        }
+      };
+    }
+  };
+  if (middleware) {
+    const dispatch = action => store.dispatch(action);
+    store.dispatch = middleware({
+      dispatch,
+      getState
+    })(coreDispatch);
+  }
+  coreDispatch({type: '@@redux/INIT'});
+  return store;
+}
+```
+
+上面代码中的核心代码如下：
+
+```js
+if (middleware) {
+  // 创建一个re-dispatch函数
+  // 一个最原始的dispatch函数，后传入多个中间件后可能被修改
+  const dispatch = action => store.dispatch(action);
+  store.dispatch = middleware({
+    dispatch,
+    getState
+  })(coreDispatch);
+}
+```
+
+下面我们来创建一个中间件：
+
+```js
+const delayMiddleware = () => next => action => {
+  setTimeout(() => {
+    next(action);
+  }, 1000);
+};
+const store = createStore(reducer, delayMiddleware);
+```
+
+添加上面的代码，在浏览器端可以看到，点击按钮后，隔1秒`store`的值才被更新
