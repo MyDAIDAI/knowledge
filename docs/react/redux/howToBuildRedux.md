@@ -713,3 +713,43 @@ const store = createStore(reducer, delayMiddleware);
 ```
 
 添加上面的代码，在浏览器端可以看到，点击按钮后，隔1秒`store`的值才被更新
+
+## Composing Middleware Together
+
+现在我们添加一个日志中间件，如下：
+
+```js
+const loggingMiddleware = ({getState}) => next => action => {
+  console.info('before', getState());
+  console.info('action', action);
+  const result = next(action);
+  console.info('after', getState());
+  return result;
+};
+```
+
+我们现在的`createStore`函数只支持传入一个`middleware`，那么需要找到一个组合中间件的方法，将所有中间件函数组合起来进行使用
+
+```js
+const applyMiddleware = (...middlewares) => store => {
+  if (middlewares.length === 0) {
+    return (next) => next;
+  }
+  const chain = middlewares.map(middleware => middleware(store));
+  const result = (next) => chain.reduce((a, b) => {
+    return a(b(next));
+  });
+  return result;
+};
+```
+
+我们将每个函数都绑定到下一个分发函数。这就是为什么我们的中间件必须全程采用箭头函数。最终得到的函数能够接收一个操作，并持续调用下一个分发函数，直至最终到达原始分发函数。
+
+```js
+const store = createStore(reducer, applyMiddleware(
+  delayMiddleware,
+  loggingMiddleware
+));
+```
+
+你可能对上面的`reduce`函数有些困惑，这个我们会在后续的文件中进行解释 [reduce](./reduce.js)
