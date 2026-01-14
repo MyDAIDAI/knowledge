@@ -128,7 +128,13 @@ const createStore = (reducer, middleware) => {
   };
 
   if(middleware) {
-    const dispatch = action => store.dispatch(action);
+    const dispatch = action => {
+      console.log('store.dispatch', store.dispatch);
+      // store.dispatch 为原始的dispatch函数，需要被中间件修改
+      // 所以需要返回 store.dispatch(action) 的执行结果
+      // 这样中间件才能正常工作
+      return store.dispatch(action)
+    };
     store.dispatch = middleware({
       dispatch,
       getState
@@ -202,18 +208,30 @@ const NoteContainer = function(props) {
 
 
 
-const delayMiddleware = ({dispatch}) => coreDispatch => action => {
+const delayMiddleware = ({dispatch}) => next => action => {
   console.log('delayMiddleware dispatch', dispatch);
   console.log('delayMiddleware', action, coreDispatch);
-  coreDispatch(action);
+  next(action);
 };
 
-const loggingMiddleware = ({getState}) => coreDispatch => action => {
+const loggingMiddleware = ({dispatch,getState}) => next => action => {
   console.info('before', getState());
-  console.info('action', action, coreDispatch);
-  const result = coreDispatch(action);
+  console.info('action', action, dispatch, next);
+  const result = next(action);
   console.info('after', getState());
   return result;
+};
+
+const thunkMiddleware = ({dispatch, getState}) => next => action => {
+  // 第一个dispatch (action) => store.dispatch(action)函数
+  console.log('thunkMiddleware', dispatch, getState);
+  console.log('thunkMiddleware next', next);
+  debugger;
+  // next(action) 会调用下一个中间件，直到最后一个中间件调用原始的dispatch函数
+  if(typeof action === 'function') {
+    return action(dispatch, getState);
+  }
+  return next(action);
 };
 
 const applyMiddleware = (...middlewares) => store => {
@@ -223,13 +241,13 @@ const applyMiddleware = (...middlewares) => store => {
   const chain = middlewares.map(middleware => middleware(store));
   console.log('chain', chain);
   const result = (next) => chain.reduce((a, b) => {
-    console.log('applyMiddleware', a, b, b(next), a(b(next)));
+    console.log('applyMiddleware', b(next), a(b(next)));
     return a(b(next));
   });
   console.log('result', result);
   return result;
 };
-const store = createStore(reducer, applyMiddleware(delayMiddleware, loggingMiddleware));
+const store = createStore(reducer, applyMiddleware(thunkMiddleware, loggingMiddleware));
 // Deact.render(Deact.createElement(NoteContainer, { store }), document.getElementById('root'));
 
 
@@ -240,7 +258,7 @@ const Connect = (mapStateToProps, mapDispatchToProps) => {
   return (WrappedComponent) => {
     return function(props) {
       const store = Deact.useContext(StoreContext);
-      console.log('Connect', store.getState());
+      console.log('Connect', store.getState(), store.dispatch);
       
       // 使用 useRef 保存最新的 props 和映射函数，以便在订阅回调中使用
       const propsRef = Deact.useRef(props);
@@ -284,6 +302,22 @@ const Connect = (mapStateToProps, mapDispatchToProps) => {
     }
   }
 }
+
+const createFakeApi = () => {
+  let _id = 0;
+  const createNote = () => new Promise(resolve => setTimeout(() => {
+    _id++
+    resolve({
+      id: `${_id}`
+    })
+  }, 1000));
+  return {
+    createNote
+  };
+};
+
+const api = createFakeApi()
+
 const mapStateToProps = (state) => {
   return {
     notes: state.notes,
@@ -291,8 +325,16 @@ const mapStateToProps = (state) => {
   }
 }
 const mapDispatchToProps = (dispatch) => {
+  console.log('mapDispatchToProps', dispatch);
   return {
-    onAddNote: () => dispatch({ type: CREATE_NOTE }),
+    onAddNote: () => dispatch((dispatch) => {
+      console.log('onAddNote', dispatch);
+      dispatch({ type: CREATE_NOTE });
+      api.createNote().then(note => {
+        console.log('onAddNote', note);
+        dispatch({ type: UPDATE_NOTE, id: note.id, content: 'Hello, world!' });
+      });
+    }),
     onOpenNote: (id) => dispatch({ type: OPEN_NOTE, id }),
     onCloseNote: () => dispatch({ type: CLOSE_NOTE }),
   }
