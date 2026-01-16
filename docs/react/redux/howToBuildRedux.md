@@ -504,6 +504,177 @@ setTimeout(() => {
 
 将上面的代码渲染在页面上，可以看到在初始化渲染完成之后，使用定时器在2000毫秒之后修改状态值，页面也更新为了最新的状态值。
 
+## Middleware
+
+我们在前面构建了一个很不错的东西，但是缺失了比较重要的部分。有时候，我们需要与服务器端进行通信，但是现在的操作是同步的，如何实现异步操作呢？答案就是在分发操作和状态变更之间插入中间件。
+
+```js
+const createStore = (reducer, middleware) => {
+  let state;
+  const subscribers = [];
+  const coreDispatch = action => {
+    validateAction(action);
+    state = reducer(state, action);
+    subscribers.forEach(handler => handler());
+  };
+  const getState = () => state;
+  const store = {
+    dispatch: coreDispatch,
+    getState,
+    subscribe: handler => {
+      subscribers.push(handler);
+      return () => {
+        const index = subscribers.indexOf(handler)
+        if (index > 0) {
+          subscribers.splice(index, 1);
+        }
+      };
+    }
+  };
+  if (middleware) {
+    const dispatch = action => store.dispatch(action);
+    store.dispatch = middleware({
+      dispatch,
+      getState
+    })(coreDispatch);
+  }
+  coreDispatch({type: '@@redux/INIT'});
+  return store;
+}
+```
+
+上面代码中的核心代码如下：
+
+```js
+if (middleware) {
+  // 创建一个re-dispatch函数
+  // 一个最原始的dispatch函数，后传入多个中间件后可能被修改
+  const dispatch = action => store.dispatch(action);
+  store.dispatch = middleware({
+    dispatch,
+    getState
+  })(coreDispatch);
+}
+```
+
+下面我们来创建一个中间件：
+
+```js
+const delayMiddleware = () => next => action => {
+  setTimeout(() => {
+    next(action);
+  }, 1000);
+};
+const store = createStore(reducer, delayMiddleware);
+```
+
+添加上面的代码，在浏览器端可以看到，点击按钮后，隔1秒`store`的值才被更新
+
+## Composing Middleware Together
+
+现在我们添加一个日志中间件，如下：
+
+```js
+const loggingMiddleware = ({getState}) => next => action => {
+  console.info('before', getState());
+  console.info('action', action);
+  const result = next(action);
+  console.info('after', getState());
+  return result;
+};
+```
+
+我们现在的`createStore`函数只支持传入一个`middleware`，那么需要找到一个组合中间件的方法，将所有中间件函数组合起来进行使用
+
+```js
+// 将两个中间件或者多个中间件进行 compose
+const applyMiddleware = (...middleware) => (store) => next => {
+  if(middleware?.length === 0) {
+    return (action) => next(action);
+  }
+  if(middleware?.length === 1) {
+    return middleware[0](store)(next);
+  }
+  const list = middleware.map(fn => fn(store))
+  const composeMiddleware = list.reduce((a, b) => {
+    return a(b(next))
+  })
+  console.log('composeMiddleware', composeMiddleware)
+  return (action) => composeMiddleware(action);
+}
+```
+
+我们将每个函数都绑定到下一个分发函数。这就是为什么我们的中间件必须全程采用箭头函数。最终得到的函数能够接收一个操作，并持续调用下一个分发函数，直至最终到达原始分发函数。
+
+```js
+const store = createStore(reducer, applyMiddleware(
+  delayMiddleware,
+  loggingMiddleware
+));
+```
+
+你可能对上面的`reduce`函数有些困惑，这个我们会在后续的文件中进行解释 [reduce](./reduce.js)
+
+上面的`applyMiddleware`函数在传入`createStore`执行过程如下：
+
+1. `middleware` 为下面 `applyMiddleware(...middlewares)` 函数返回的函数 `(store) => next => {...someCode}`
+2. `middleware({dispatch, getState})`执行后返回函数为 `next => { ...someCode }`
+3. `middleware({dispatch, getState})(coreDispatch)`执行后返回下面的函数 `action => composeMiddleware(action)`, 其中 `composeMiddleware` 为使用 `reduce` 方法将多个中间件组合起来的函数
+
+### compose
+
+`compose`部分的代码如下：
+
+```js
+  const list = middleware.map(fn => fn(store));
+  const composeMiddleware = list.reduce((a, b) => {
+    return a(b(next))
+  })
+```
+
+因为中间件函数需要向内部传入对应的`store`，也就是需要传入`dispatch`以及`getState`供中间件内部使用，所以需要先将中间件执行一遍，将其`store`变量保存在函数闭包中。执行完成后的中间件函数如下：
+
+```js
+const delayMiddleware = next => action => {
+  // 函数内部的可以获取到闭包中保存的 dispatch 以及 getState 函数
+  // 其 dispatch 以及 getState 为在 createStore 函数中执行时传入
+  setTimeout(() => {
+    console.log('delayMiddleware', dispatch, next, action);
+    next(action)
+  , 1000});
+}
+const loggingMiddleware = next => action => {
+  console.log('loggingMiddleware before', getState());
+  next(action);
+  console.log('loggingMiddleware after', getState());
+}
+```
+
+上面代码中的`list`也就是上面的`delayMiddleware`以及`loggingMiddleware`集合起来的数组 `[delayMiddleware, loggingMiddleware]`，将该数组进行`reduce`操作，先执行`loggingMiddleware(next)`函数，其中的`next`参数为`createStore`函数中的传入的`coreDispatch`变量，执行完成后为`action => {...some loggingMiddleware code}`，我们将该函数暂时命名为`nextLoggingMiddleware`，后面将`nextLoggingMiddleware`函数作为`delayMiddleware`中间件的`next`参数传入。
+整个`reduce`函数执行完成后，返回如下代码
+
+```js
+const composeMiddleware = action => {
+  // ...some delayMiddleware code
+  // dispatch 为createStore中传入的函数： action => store.dispatch(action)
+  // next 变量为：action => {...some loggingMiddleware code}
+  setTimeout(() => {
+    console.log('delayMiddleware', dispatch, next, action);
+    next(action)
+  , 1000});
+}
+```
+
+完成上面中间件的组合代码后，其`store.dispatch`函数如下：
+
+```js
+store.dispatch = action =>  composeMiddleware(action)
+```
+
+在执行`composeMiddleware`函数时，会执行`delayMiddleware`中的代码，调用`next`函数后执行`loggingMiddleware`中的代码，在`loggingMiddleware`中调用`next`后会执行`coreDispatch`函数，其`coreDispatch`函数就是核心的修改`state`值的函数。如此，就将整个中间件链按照**洋葱模型**串联起来了。
+
+## Thunk middleware
+
 ## Bring Your own Components
 
 一般情况下，我们只需要使用过组件内部的状态，那么什么时候需要使用`Redux`状态库呢？只需要考虑下面的问题：
@@ -647,109 +818,3 @@ Deact.render(
 ```
 
 在上面的代码中，实现了一个`Connect`组件，向该函数传入两个映射函数，一个将`state`映射为`props`中的属性，一个将`dispatch`映射为`props`中的方法，然后传入一个需要被包裹的组件，执行完成后会返回一个组件函数，在该函数内有被映射的属性以及方法，还有最重要的就是，对`store`修改添加订阅更新事件`subscribe`
-
-## Middleware
-
-我们在前面构建了一个很不错的东西，但是缺失了比较重要的部分。有时候，我们需要与服务器端进行通信，但是现在的操作是同步的，如何实现异步操作呢？答案就是在分发操作和状态变更之间插入中间件。
-
-```js
-const createStore = (reducer, middleware) => {
-  let state;
-  const subscribers = [];
-  const coreDispatch = action => {
-    validateAction(action);
-    state = reducer(state, action);
-    subscribers.forEach(handler => handler());
-  };
-  const getState = () => state;
-  const store = {
-    dispatch: coreDispatch,
-    getState,
-    subscribe: handler => {
-      subscribers.push(handler);
-      return () => {
-        const index = subscribers.indexOf(handler)
-        if (index > 0) {
-          subscribers.splice(index, 1);
-        }
-      };
-    }
-  };
-  if (middleware) {
-    const dispatch = action => store.dispatch(action);
-    store.dispatch = middleware({
-      dispatch,
-      getState
-    })(coreDispatch);
-  }
-  coreDispatch({type: '@@redux/INIT'});
-  return store;
-}
-```
-
-上面代码中的核心代码如下：
-
-```js
-if (middleware) {
-  // 创建一个re-dispatch函数
-  // 一个最原始的dispatch函数，后传入多个中间件后可能被修改
-  const dispatch = action => store.dispatch(action);
-  store.dispatch = middleware({
-    dispatch,
-    getState
-  })(coreDispatch);
-}
-```
-
-下面我们来创建一个中间件：
-
-```js
-const delayMiddleware = () => next => action => {
-  setTimeout(() => {
-    next(action);
-  }, 1000);
-};
-const store = createStore(reducer, delayMiddleware);
-```
-
-添加上面的代码，在浏览器端可以看到，点击按钮后，隔1秒`store`的值才被更新
-
-## Composing Middleware Together
-
-现在我们添加一个日志中间件，如下：
-
-```js
-const loggingMiddleware = ({getState}) => next => action => {
-  console.info('before', getState());
-  console.info('action', action);
-  const result = next(action);
-  console.info('after', getState());
-  return result;
-};
-```
-
-我们现在的`createStore`函数只支持传入一个`middleware`，那么需要找到一个组合中间件的方法，将所有中间件函数组合起来进行使用
-
-```js
-const applyMiddleware = (...middlewares) => store => {
-  if (middlewares.length === 0) {
-    return (next) => next;
-  }
-  const chain = middlewares.map(middleware => middleware(store));
-  const result = (next) => chain.reduce((a, b) => {
-    return a(b(next));
-  });
-  return result;
-};
-```
-
-我们将每个函数都绑定到下一个分发函数。这就是为什么我们的中间件必须全程采用箭头函数。最终得到的函数能够接收一个操作，并持续调用下一个分发函数，直至最终到达原始分发函数。
-
-```js
-const store = createStore(reducer, applyMiddleware(
-  delayMiddleware,
-  loggingMiddleware
-));
-```
-
-你可能对上面的`reduce`函数有些困惑，这个我们会在后续的文件中进行解释 [reduce](./reduce.js)
