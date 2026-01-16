@@ -588,19 +588,23 @@ const loggingMiddleware = ({getState}) => next => action => {
 
 ```js
 // 将两个中间件或者多个中间件进行 compose
-const applyMiddleware = (...middleware) => (store) => next => {
-  if(middleware?.length === 0) {
-    return (action) => next(action);
+function applyMiddleware(...middleware) {
+  return (store) => next => {
+    if(middleware?.length === 0) {
+      return (action) => next(action);
+    }
+    if(middleware?.length === 1) {
+      return middleware[0](store)(next);
+    }
+    const chain = middleware.map(fn => fn(store))
+    const composeMiddleware = chain.reduce((a, b) => {
+      return (next) => {
+        return a(b(next));
+      }
+    })
+   
+    return composeMiddleware(next);
   }
-  if(middleware?.length === 1) {
-    return middleware[0](store)(next);
-  }
-  const list = middleware.map(fn => fn(store))
-  const composeMiddleware = list.reduce((a, b) => {
-    return a(b(next))
-  })
-  console.log('composeMiddleware', composeMiddleware)
-  return (action) => composeMiddleware(action);
 }
 ```
 
@@ -626,10 +630,12 @@ const store = createStore(reducer, applyMiddleware(
 `compose`部分的代码如下：
 
 ```js
-  const list = middleware.map(fn => fn(store));
-  const composeMiddleware = list.reduce((a, b) => {
-    return a(b(next))
-  })
+const chain = middleware.map(fn => fn(store))
+const composeMiddleware = chain.reduce((a, b) => {
+  return (next) => {
+    return a(b(next));
+  }
+})
 ```
 
 因为中间件函数需要向内部传入对应的`store`，也就是需要传入`dispatch`以及`getState`供中间件内部使用，所以需要先将中间件执行一遍，将其`store`变量保存在函数闭包中。执行完成后的中间件函数如下：
@@ -648,30 +654,75 @@ const loggingMiddleware = next => action => {
   next(action);
   console.log('loggingMiddleware after', getState());
 }
+
+const thunkMiddleware = next => action => {
+  if(typeof action === 'function') {
+    return action(dispatch, getState);
+  }
+  console.log('thunkMiddleware', dispatch, getState, next, action)
+  return next(action);
+}
 ```
 
-上面代码中的`list`也就是上面的`delayMiddleware`以及`loggingMiddleware`集合起来的数组 `[delayMiddleware, loggingMiddleware]`，将该数组进行`reduce`操作，先执行`loggingMiddleware(next)`函数，其中的`next`参数为`createStore`函数中的传入的`coreDispatch`变量，执行完成后为`action => {...some loggingMiddleware code}`，我们将该函数暂时命名为`nextLoggingMiddleware`，后面将`nextLoggingMiddleware`函数作为`delayMiddleware`中间件的`next`参数传入。
-整个`reduce`函数执行完成后，返回如下代码
+上面代码中的`chain`也就是上面的`delayMiddleware`以及`loggingMiddleware`集合起来的数组 `[delayMiddleware, thunkMiddleware, loggingMiddleware]`，将该数组进行`reduce`操作，第一次执行时返回如下函数：
 
 ```js
-const composeMiddleware = action => {
-  // ...some delayMiddleware code
-  // dispatch 为createStore中传入的函数： action => store.dispatch(action)
-  // next 变量为：action => {...some loggingMiddleware code}
+// a函数为 delayMiddleware，b函数为 thunkMiddleware
+(next) => {
+  // delayMiddleware(thunkMiddleware(next))
+  return a(b(next));
+}
+
+next => delayMiddleware(thunkMiddleware(next));
+```
+
+再次执行`reduce`操作时会把上面的函数，也就是`delayMiddleware(thunkMiddleware(next))`作为`a`参数传入，然后返回一个新的函数，如下：
+
+```js
+next => {
+  // 下面代码片段执行完成后为 delayMiddleware(thunkMiddleware(logginMiddleware(next)))
+  return (next => {
+    return delayMiddleware(thunkMiddleware(next))
+  })(logginMiddleware(next))
+}
+```
+
+所以上面的代码片段执行完成后，返回的代码为 `next => delayMiddleware(thunkMiddleware(logginMiddleware(next)))`，执行该函数后返回`delayMiddleware(thunkMiddleware(logginMiddleware(next)))`，其中传入`logginMiddleware`函数中的`next`参数就为`coreDispatch`
+
+```js
+// delayMiddleware(thunkMiddleware(logginMiddleware(next)))
+// delayMiddleware函数先执行，返回如下函数，其中 next为闭包内保存的thunkMiddleware函数执行后返回的action => {...some thunk middleware code}
+action => {
   setTimeout(() => {
     console.log('delayMiddleware', dispatch, next, action);
     next(action)
   , 1000});
+}
+
+//thunkMiddleware函数执行后返回下面代码，其中 next为闭包内保存的loggingMiddleware函数 
+action => {
+  if(typeof action === 'function') {
+    return action(dispatch, getState);
+  }
+  console.log('thunkMiddleware', dispatch, getState, next, action)
+  return next(action);
+}
+
+// loggingMiddleware函数执行后返回下面代码，其中next为闭包内传入的 coreDispatch函数
+action => {
+  console.log('loggingMiddleware before', getState());
+  next(action);
+  console.log('loggingMiddleware after', getState());
 }
 ```
 
 完成上面中间件的组合代码后，其`store.dispatch`函数如下：
 
 ```js
-store.dispatch = action =>  composeMiddleware(action)
+store.dispatch = delayMiddleware(thunkMiddleware(logginMiddleware(next)))
 ```
 
-在执行`composeMiddleware`函数时，会执行`delayMiddleware`中的代码，调用`next`函数后执行`loggingMiddleware`中的代码，在`loggingMiddleware`中调用`next`后会执行`coreDispatch`函数，其`coreDispatch`函数就是核心的修改`state`值的函数。如此，就将整个中间件链按照**洋葱模型**串联起来了。
+在执行`delayMiddleware`中的代码，调用`next`函数后执行`loggingMiddleware`中的代码，在`loggingMiddleware`中调用`next`后会执行`coreDispatch`函数，其`coreDispatch`函数就是核心的修改`state`值的函数。如此，就将整个中间件链按照**洋葱模型**串联起来了。
 
 ## Thunk middleware
 
