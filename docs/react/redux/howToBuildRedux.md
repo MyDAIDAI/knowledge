@@ -726,6 +726,248 @@ store.dispatch = delayMiddleware(thunkMiddleware(logginMiddleware(next)))
 
 ## Thunk middleware
 
+现在我们来做一些“异步”的事情，上面都是做一些同步的（`dispatch`只能接收纯对象（`plain object`）作为 `action`），但是在实际的应用中需要处理：
+
+- 异步操作（API 调用）
+- 条件 `dispatch`
+- 多步 `dispatch`
+- 访问当前状态后再决定是否 `dispatch`
+
+### 设计目标
+
+创建一个中间件，使其在`dispatch`的时候可以传入一个函数，在这个函数内可以执行异步等操作
+
+我们先来引入一个“异步”中间件，代码如下：
+
+```js
+const thunkMiddleware = ({dispatch, getState}) => next => action => {
+  if (typeof action === 'function') {
+    return action(dispatch, getState);
+  }
+  return next(action);
+};
+// use like this:
+store.dispatch(({getState, dispatch}) => {
+  // Grab something from the state
+  const someId = getState().someId;
+  // Fetch something that depends on knowing that something
+  fetchSomething(someId)
+    .then((something) => {
+      // Dispatch whenever we feel like it
+      dispatch({
+        type: 'someAction',
+        something
+      });
+    });
+});
+```
+
+上面的代码中，如果传入给`store.dispatch`中的`action`为一个函数的话，那么就会直接执行这个函数，并且将`dispatch`函数(也就是`const dispatch = (action) => store.dispatch(action)`)以及`getState`函数传入，那么在`action`函数中，就可以继续通过调用`dispatch`函数来从头进入**洋葱模型**的中间件链。
+
+`thunkMiddleware`的设计目标是为了处理**异步操作**和**复杂的逻辑**，这些逻辑可能需要**延迟dispatch**、或者**有条件地dispatch**。在基本的`Redux`中，`action`必须是一个纯对象，但是当我们需要进行异步操作（比如从服务器获取数据）时，我们需要在`action`函数中执行**异步操作**，并在异步操作完成后再`dispatch`一个`action`。
+
+### 基本思路
+
+`thunkMiddleware`会检查传入`dispatch`的`action`是否为函数。如果是函数，则调用这个函数，并将`dispatch`和`getState`作为参数传递给它。这样，这个函数（即thunk）就可以在内部执行异步操作，并在适当的时候使用`dispatch`来发出其他的`action`。
+
+### 函数解析
+
+- 中间件签名：`Redux`中间件遵循柯里化（`currying`）风格，依次接收`{ dispatch, getState }、next、action`这三个参数。
+  - `{ dispatch, getState }`：这是`Redux store`的两个方法。注意，这里的`dispatch`是经过中间件链包装后的`dispatch`（即从最外层传入的，可能是被其他中间件处理过的），而`getState`可以获取当前状态。
+  - `next`：是调用链中下一个中间件的`dispatch`方法。如果当前中间件是最后一个，那么`next`就是原始的`store.dispatch`。
+  - `action`：当前被`dispatch`的`action`。
+
+- 判断`action`类型：
+  - 如果`action`是一个函数，那么就不继续传递给下一个中间件，而是直接调用这个函数，并传入`dispatch`和`getState`。这个函数可以执行异步操作，并且可以在函数内部`dispatch`其他的`action`。
+  - 如果不是函数：那么就直接调用`next(action)`，将`action`传递给下一个中间件，最终到达`reducer`。
+
+### 洋葱模型
+
+```text
+store.dispatch(action)
+    ↓
+中间件1: 接收 action，处理，调用 next(action)
+    ↓
+中间件2: 接收 action，处理，调用 next(action)
+    ↓
+thunkMiddleware: 如果是函数，执行；否则 next(action)
+    ↓
+中间件3: ...
+    ↓
+最终到达 reducer
+```
+
+### 为什么返回 thunk 的执行结果？
+
+```js
+const thunkMiddleware = ({ dispatch, getState }) => next => action => {
+  if (typeof action === 'function') {
+    // 返回 thunk 的执行结果
+    return action(dispatch, getState);
+    // 这意味着我们可以链式调用，获取异步请求的返回值
+  }
+  return next(action);
+};
+
+// 使用示例：thunk 可以返回 Promise
+const fetchUser = (userId) => async (dispatch) => {
+  const response = await api.getUser(userId);
+  dispatch({ type: 'SET_USER', payload: response });
+  return response; // 返回 Promise
+};
+
+// 调用
+store.dispatch(fetchUser(123))
+  .then(user => console.log('User fetched:', user));
+```
+
+### 执行流程详解
+
+假设我们有以下中间件链：
+
+```js
+const middleware1 = store => next => action => {
+  console.log('Middleware 1 start');
+  const result = next(action);
+  console.log('Middleware 1 end');
+  return result;
+};
+
+const middleware2 = store => next => action => {
+  console.log('Middleware 2 start');
+  const result = next(action);
+  console.log('Middleware 2 end');
+  return result;
+};
+
+const thunkMiddleware = store => next => action => {
+  console.log('Thunk Middleware start');
+  if (typeof action === 'function') {
+    console.log('Action is a function');
+    // 关键：这里传入的 dispatch 是 store.dispatch
+    return action(store.dispatch, store.getState);
+  }
+  const result = next(action);
+  console.log('Thunk Middleware end');
+  return result;
+};
+
+// 组合中间件链
+const chain = [middleware1, middleware2, thunkMiddleware];
+const dispatch = compose(chain)(store.dispatch);
+
+// 定义 thunk 函数
+const myAsyncThunk = () => (dispatch, getState) => {
+  console.log('Thunk started');
+  
+  // 第一步：dispatch 一个同步 action
+  dispatch({ type: 'START_LOADING' });
+  
+  // 第二步：执行异步操作
+  setTimeout(() => {
+    // 第三步：dispatch 另一个 action
+    dispatch({ type: 'FINISH_LOADING', payload: 'data' });
+  }, 1000);
+};
+
+// 初始 dispatch
+store.dispatch(myAsyncThunk());
+```
+
+上面代码的执行过程日志如下：
+
+```js
+第一次 dispatch（thunk）：
+1. Middleware 1 start
+2. Middleware 2 start
+3. Thunk Middleware start
+4. Action is a function
+5. Thunk started
+
+在 thunk 内第一次 dispatch({ type: 'START_LOADING' })：
+6. Middleware 1 start  ← 重新开始！
+7. Middleware 2 start
+8. Thunk Middleware start
+9. Thunk Middleware end (action 是对象)
+10. Middleware 2 end
+11. Middleware 1 end
+
+在 thunk 内第二次 dispatch({ type: 'FINISH_LOADING' })（异步）：
+12. Middleware 1 start  ← 再次重新开始！
+13. Middleware 2 start
+14. Thunk Middleware start
+15. Thunk Middleware end (action 是对象)
+16. Middleware 2 end
+17. Middleware 1 end
+```
+
+可以从上面的日志中发现，当第一次进行`dispatch`时，传入的是一个函数，会依次进入洋葱模型执行`Middleware1`、`Middleware2`以及`thunkMiddleware`。在`thunkMiddleware`中判断其`action`为一个函数，则执行该函数，不继续执行后面的代码。后续在`action`函数中继续`dispatch`后，重新开始执行洋葱模型。
+
+### 为什么这么设计？
+
+- 保持中间件链的完整性
+
+```js
+// 假设我们有一个日志中间件
+const loggerMiddleware = store => next => action => {
+  console.log('Dispatching:', action);
+  const result = next(action);
+  console.log('Next state:', store.getState());
+  return result;
+};
+
+// 和 Thunk Middleware 一起使用
+applyMiddleware(loggerMiddleware, thunkMiddleware)
+
+// 在 thunk 内 dispatch 的 action 也应该被 logger 记录
+// 所以必须重新走一遍中间件链
+```
+
+- 保证中间件顺序执行
+
+```js
+// 中间件可能有依赖关系
+const middlewareA = store => next => action => {
+  // 需要先处理 action
+  if (action.type === 'SPECIAL') {
+    action.processed = true;
+  }
+  return next(action);
+};
+
+const middlewareB = store => next => action => {
+  // 依赖于 A 的处理结果
+  if (action.processed) {
+    // 特殊处理
+  }
+  return next(action);
+};
+
+// 如果 thunk 内的 dispatch 不重新走中间件链
+// middlewareB 就看不到 middlewareA 的处理结果
+```
+
+- 支持嵌套的异步操作
+
+```js
+// 嵌套的 thunk
+const complexAsyncFlow = () => async (dispatch) => {
+  dispatch({ type: 'STEP_1' });
+  
+  const data = await fetchData();
+  
+  // 根据结果 dispatch 不同的 action
+  if (data.requiresMore) {
+    // 嵌套 dispatch 另一个 thunk
+    await dispatch(fetchMoreData(data));
+  }
+  
+  dispatch({ type: 'STEP_2', payload: data });
+};
+
+// 所有 dispatch 都应该经过相同的中间件处理
+```
+
 ## Bring Your own Components
 
 一般情况下，我们只需要使用过组件内部的状态，那么什么时候需要使用`Redux`状态库呢？只需要考虑下面的问题：
