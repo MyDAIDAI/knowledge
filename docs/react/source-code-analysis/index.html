@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>React in HTML</title>
+    <!-- 加载 React 和 ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <!-- 加载 Babel 用于编译 JSX -->
+    <script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body>
+  <div id="root"></div>
+
+  <!-- 使用 type="text/babel" 让 Babel 编译 JSX -->
+  <script type="text/babel">
+    // 创建 React 组件
+    function App() {
+      const [count, setCount] = React.useState(1);
+      debugger;
+      React.useEffect(() => {
+        debugger;
+        setCount((count) => count + 1);
+      }, []);
+
+      return (
+        <div>
+          <h1>Hello, React!</h1>
+          <p>This is React running in HTML</p>
+          <p>Count: {count}</p>
+          <button onClick={() => setCount(count + 1)}>Increment</button>
+        </div>
+      );
+    }
+
+    // 渲染组件到 DOM
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
