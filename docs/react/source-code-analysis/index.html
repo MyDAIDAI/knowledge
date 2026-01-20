@@ -4,32 +4,95 @@
     <meta charset="UTF-8">
     <title>React in HTML</title>
     <!-- 加载 React 和 ReactDOM -->
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script crossorigin src="./react.development.js"></script>
+    <script crossorigin src="./react-dom.development.js"></script>
     <!-- 加载 Babel 用于编译 JSX -->
     <script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 </head>
+<style>
+  .component {
+    border: 1px solid #ccc;
+    padding: 10px;
+    margin: 10px;
+  }
+</style>
 <body>
   <div id="root"></div>
 
   <!-- 使用 type="text/babel" 让 Babel 编译 JSX -->
   <script type="text/babel">
+
+    function A() {
+      debugger;
+      return (
+        <div className="component" data-name="A">
+          A
+          <B />
+          <E />
+        </div>
+      );
+    }
+
+    function B() {
+      debugger;
+      return (
+        <div className="component" data-name="B">
+          B
+          <C />
+        </div>
+      );
+    }
+
+    function C() {
+      debugger;
+      return (
+        <div className="component" data-name="C">
+          C
+          <D />
+        </div>
+      );
+    }
+
+    function D() {
+      debugger;
+      return (
+        <div className="component" data-name="D">
+          D
+        </div>
+      );
+    }
+
+    function E() {
+      debugger;
+      return (
+        <div className="component" data-name="E">
+          E
+          <F />
+        </div>
+      );
+    }
+
+    function F() {
+      debugger;
+      return (
+        <div className="component" data-name="F">
+          F
+        </div>
+      );
+    }
+
     // 创建 React 组件
     function App() {
-      const [count, setCount] = React.useState(1);
-      debugger;
-      React.useEffect(() => {
-        debugger;
-        setCount((count) => count + 1);
-      }, []);
+      // const [count, setCount] = React.useState(1);
+      // debugger;
+      // React.useEffect(() => {
+      //   debugger;
+      //   setCount((count) => count + 1);
+      // }, []);
+      debugger
 
       return (
-        <div>
-          <h1>Hello, React!</h1>
-          <p>This is React running in HTML</p>
-          <p>Count: {count}</p>
-          <button onClick={() => setCount(count + 1)}>Increment</button>
-        </div>
+        <A />
       );
     }
 
