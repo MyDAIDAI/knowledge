@@ -40,6 +40,13 @@ module.exports = {
           { title: "Fiber", path: "/react/02.Fiber.md" },
           { title: "Bit", path: "/react/03.bit.md" },
           { title: 'BuildYourOwnReact', path: "/react/BuildYourOwnReact/buildYourOwnReact.md" },
+          { title: 'Source Code Analysis',
+            collapsable: true,
+            children: [
+              { title: 'Travers Fiber Tree', path: "/react/source-code-analysis/01.travers-fiber-tree.md" },
+              { title: 'Initial Mount', path: "/react/source-code-analysis/02.initial-mount.md" },
+            ]
+          },
         ],
       },
       {
