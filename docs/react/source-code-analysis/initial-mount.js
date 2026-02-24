@@ -99,18 +99,17 @@ function scheduleUpdateOnFiber(root, fiber, lane) {
 }
 
 function ensureRootIsScheduled(root) {
-  performConcurrentWorkOnRoot(root);
+  performSyncWorkOnRoot(root);
 }
 
-function performConcurrentWorkOnRoot(root) {
+function performSyncWorkOnRoot(root) {
   renderRootSync(root, NoLanes);
-  finishConcurrentRender(root, RootDidNotComplete, NoLanes);
-}
-
-function finishConcurrentRender(root, exitStatus, lanes) {
-  root.finishedWork = root.current.alternate;
-  root.finishedLanes = lanes;
-  // commitRoot(root);
+  var finishedWork = root.current.alternate;
+  root.finishedWork = finishedWork;
+  root.finishedLanes = NoLanes;
+  commitRoot(root);
+  ensureRootIsScheduled(root, now());
+  return null;
 }
 
 var workInProgress = null;
@@ -217,7 +216,6 @@ function mountIndeterminateComponent(_current, workInProgress, Component, render
   var props = workInProgress.pendingProps;
   workInProgress.tag = FunctionComponent;
   var value = Component && Component(props);
-  debugger;
   workInProgress.flags |= PerformedWork;
   workInProgress.memoizedState = null;
   workInProgress.updateQueue = null;
@@ -507,7 +505,7 @@ function completeWork(current, workInProgress, renderLanes) {
   var newProps = workInProgress.pendingProps;
   switch(workInProgress.tag) {
     case HostRoot:
-      // return updateHostContainer(current, workInProgress);
+      bubbleProperties(workInProgress);
       return null;
     case HostComponent:
       {
@@ -520,10 +518,18 @@ function completeWork(current, workInProgress, renderLanes) {
           appendAllChildren(instance, workInProgress, false, false);
           workInProgress.stateNode = instance;
         }
+        bubbleProperties(workInProgress);
+        return null;
+      }
+    case FunctionComponent:
+      {
+        bubbleProperties(workInProgress);
+        return null;
       }
     default:
       return null;
   }
+  return null;
 }
 function shouldSetTextContent(type, props) {
   return type === 'textarea' || type === 'noscript' || typeof props.children === 'string' || typeof props.children === 'number' || typeof props.dangerouslySetInnerHTML === 'object' && props.dangerouslySetInnerHTML !== null && props.dangerouslySetInnerHTML.__html != null;
@@ -617,72 +623,72 @@ function createInstance(type, props, rootContainerInstance, hostContext) {
   return document.createElement(type);
 }
 
-// function commitRoot(root) {
-//   var finishedWork = root.finishedWork;
-//   if (finishedWork === null) {
-//     return;
-//   }
+function commitRoot(root) {
+  var finishedWork = root.finishedWork;
+  if (finishedWork === null) {
+    return;
+  }
   
-//   // 简化的提交逻辑：将 fiber 树转换为 DOM
-//   commitMutationEffects(root, finishedWork);
-// }
+  // 简化的提交逻辑：将 fiber 树转换为 DOM
+  commitMutationEffects(root, finishedWork);
+}
 
-// function commitMutationEffects(root, finishedWork) {
-//   // 简化的提交：直接提交整个树
-//   commitPlacement(finishedWork);
-// }
+function commitMutationEffects(root, finishedWork) {
+  // 简化的提交：直接提交整个树
+  commitPlacement(finishedWork);
+}
 
-// function commitPlacement(finishedWork) {
-//   // 如果是 HostRoot，直接使用容器
-//   var parent = null;
-//   if (finishedWork.tag === HostRoot) {
-//     parent = finishedWork.stateNode.containerInfo;
-//   } else {
-//     var parentFiber = getHostParentFiber(finishedWork);
-//     if (parentFiber) {
-//       if (parentFiber.tag === HostRoot) {
-//         parent = parentFiber.stateNode.containerInfo;
-//       } else {
-//         parent = parentFiber.stateNode;
-//       }
-//     }
-//   }
+function commitPlacement(finishedWork) {
+  // 如果是 HostRoot，直接使用容器
+  var parent = null;
+  if (finishedWork.tag === HostRoot) {
+    parent = finishedWork.stateNode.containerInfo;
+  } else {
+    var parentFiber = getHostParentFiber(finishedWork);
+    if (parentFiber) {
+      if (parentFiber.tag === HostRoot) {
+        parent = parentFiber.stateNode.containerInfo;
+      } else {
+        parent = parentFiber.stateNode;
+      }
+    }
+  }
   
-//   if (!parent) {
-//     return;
-//   }
+  if (!parent) {
+    return;
+  }
   
-//   // 遍历子节点并添加到 DOM
-//   var node = finishedWork.child;
-//   while (node !== null) {
-//     if (node.tag === HostComponent || node.tag === HostText) {
-//       if (node.stateNode) {
-//         appendInitialChild(parent, node.stateNode);
-//       }
-//     } else if (node.child !== null) {
-//       // 递归处理子节点
-//       commitPlacement(node);
-//     }
+  // 遍历子节点并添加到 DOM
+  var node = finishedWork.child;
+  while (node !== null) {
+    if (node.tag === HostComponent || node.tag === HostText) {
+      if (node.stateNode) {
+        appendInitialChild(parent, node.stateNode);
+      }
+    } else if (node.child !== null) {
+      // 递归处理子节点
+      commitPlacement(node);
+    }
     
-//     node = node.sibling;
-//   }
-// }
+    node = node.sibling;
+  }
+}
 
-// function getHostParentFiber(fiber) {
-//   var parent = fiber.return;
-//   while (parent !== null) {
-//     if (parent.tag === HostComponent || parent.tag === HostRoot) {
-//       return parent;
-//     }
-//     parent = parent.return;
-//   }
-//   return null;
-// }
+function getHostParentFiber(fiber) {
+  var parent = fiber.return;
+  while (parent !== null) {
+    if (parent.tag === HostComponent || parent.tag === HostRoot) {
+      return parent;
+    }
+    parent = parent.return;
+  }
+  return null;
+}
 
-// function handleError(root, thrownValue) {
-//   // 简化的错误处理
-//   console.error('Error during render:', thrownValue);
-// }
+function handleError(root, thrownValue) {
+  // 简化的错误处理
+  console.error('Error during render:', thrownValue);
+}
 
 // 定义 React 对象（JSX 转换需要）
 var React = {

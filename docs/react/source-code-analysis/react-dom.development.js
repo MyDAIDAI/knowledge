@@ -21563,13 +21563,13 @@
   }
 
   function beginWork(current, workInProgress, renderLanes) {
+    debugger;
     {
       if (workInProgress._debugNeedsRemount && current !== null) {
         // This will restart the begin phase with a new fiber.
         return remountFiber(current, workInProgress, createFiberFromTypeAndProps(workInProgress.type, workInProgress.key, workInProgress.pendingProps, workInProgress._debugOwner || null, workInProgress.mode, workInProgress.lanes));
       }
     }
-
     if (current !== null) {
       var oldProps = current.memoizedProps;
       var newProps = workInProgress.pendingProps;
@@ -26265,8 +26265,9 @@
     subtreeRenderLanes = subtreeRenderLanesCursor.current;
     pop(subtreeRenderLanesCursor, fiber);
   }
-
+  var hostRootFiber = null;
   function prepareFreshStack(root, lanes) {
+    debugger;
     root.finishedWork = null;
     root.finishedLanes = NoLanes;
     var timeoutHandle = root.timeoutHandle;
@@ -26300,6 +26301,7 @@
     workInProgressRootPingedLanes = NoLanes;
     workInProgressRootConcurrentErrors = null;
     workInProgressRootRecoverableErrors = null;
+    hostRootFiber = rootWorkInProgress;
     finishQueueingConcurrentUpdates();
 
     {
@@ -26608,6 +26610,7 @@
     } else {
       next = beginWork$1(current, unitOfWork, subtreeRenderLanes);
     }
+    debugger;
 
     resetCurrentFiber();
     unitOfWork.memoizedProps = unitOfWork.pendingProps;
@@ -28709,6 +28712,7 @@
   identifierPrefix, onRecoverableError, transitionCallbacks) {
     var root = new FiberRootNode(containerInfo, tag, hydrate, identifierPrefix, onRecoverableError);
     // stateNode is any.
+    console.log('createFiberRoot', root);
 
 
     var uninitializedFiber = createHostRootFiber(tag, isStrictMode);
@@ -28829,6 +28833,7 @@
   }
 
   function createContainer(containerInfo, tag, hydrationCallbacks, isStrictMode, concurrentUpdatesByDefaultOverride, identifierPrefix, onRecoverableError, transitionCallbacks) {
+    debugger;
     var hydrate = false;
     var initialChildren = null;
     return createFiberRoot(containerInfo, tag, hydrate, initialChildren, hydrationCallbacks, isStrictMode, concurrentUpdatesByDefaultOverride, identifierPrefix, onRecoverableError);
@@ -29429,6 +29434,7 @@
       }
     }
 
+    debugger;
     var root = createContainer(container, ConcurrentRoot, null, isStrictMode, concurrentUpdatesByDefaultOverride, identifierPrefix, onRecoverableError);
     markContainerAsRoot(root.current, container);
     var rootContainerElement = container.nodeType === COMMENT_NODE ? container.parentNode : container;
