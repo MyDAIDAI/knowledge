@@ -3,9 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <title>React in HTML</title>
+    <!-- 注意：此页面使用 type="text/babel" 在浏览器中实时编译 JSX，会较慢（需下载并运行 Babel）。需要快速演示请用 initial-mount-fast.html -->
     <script src="./initial-mount.js"></script>
     <!-- 加载 Babel 用于编译 JSX -->
-    <script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- <script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script> -->
 </head>
 <style>
   .component {
@@ -16,30 +17,23 @@
 </style>
 <body>
   <div id="root"></div>
-
-  <!-- 使用 type="text/babel" 让 Babel 编译 JSX -->
-  <script type="text/babel">
+  <script>
 
     function A() {
-      return (
-        <div className="component" data-name="A">
-          <div>A</div>
-          <div>B</div>
-        </div>
+      return React.createElement(
+        'div',
+        { className: 'component', 'data-name': 'A' },
+        React.createElement('div', null, 'A'),
+        React.createElement('div', null, 'B')
       );
     }
 
-
-    // 创建 React 组件
     function App() {
-      return (
-        <A />
-      );
+      return React.createElement(A, null);
     }
 
-    // 渲染组件到 DOM
-    const root = ReactDOM.createRoot(document.getElementById('root'));
-    root.render(<App />);
+    var root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(React.createElement(App, null));
   </script>
 </body>
 </html>

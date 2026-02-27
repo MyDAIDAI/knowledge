@@ -13,14 +13,30 @@ var DidCapture = 128;
 var ForceClientRender = 256;
 var Ref = 512;
 var Snapshot = 1024;
+var Passive = 2048;
+var Visibility = 8192;
+
+var Forked = 1048576;
+var LayoutStatic = 4194304;
+var PassiveStatic = 8388608;
+var RefStatic = 2097152;
+
+var NoLanes = 0;
+var NoLane = 0;
 
 var Incomplete = 32768;
+
+var BeforeMutationMask = Update | Snapshot | 0;
+var MutationMask =
+  Placement | Update | ChildDeletion | ContentReset | Ref | Visibility;
+var LayoutMask = Update | Callback | Ref | Visibility;
+var PassiveMask = Passive | ChildDeletion;
+var StaticMask = LayoutStatic | PassiveStatic | RefStatic;
 
 function createRoot(container, options) {
   const root = createContainer(container, ConcurrentRoot);
   return new ReactDOMRoot(root);
 }
-
 
 function createContainer(containerInfo, tag) {
   return createFiberRoot(containerInfo, tag);
@@ -71,14 +87,13 @@ function FiberNode(tag, pendingProps, key, mode) {
 function ReactDOMRoot(internalRoot) {
   this._internalRoot = internalRoot;
 }
-ReactDOMRoot.prototype.render =
-  function (children) {
-    const root = this._internalRoot;
-    if (root === null) {
-      throw new Error('Cannot update an unmounted root.');
-    }
-    updateContainer(children, root, null, null);
-  };
+ReactDOMRoot.prototype.render = function (children) {
+  const root = this._internalRoot;
+  if (root === null) {
+    throw new Error("Cannot update an unmounted root.");
+  }
+  updateContainer(children, root, null, null);
+};
 
 function updateContainer(element, container, parentComponent, callback) {
   const current = container.current;
@@ -108,7 +123,6 @@ function performSyncWorkOnRoot(root) {
   root.finishedWork = finishedWork;
   root.finishedLanes = NoLanes;
   commitRoot(root);
-  ensureRootIsScheduled(root, now());
   return null;
 }
 
@@ -118,12 +132,14 @@ var workInProgressRoot = null;
 var hostRootFiber = null;
 function renderRootSync(root, lanes) {
   prepareFreshStack(root, lanes);
-  do{
+  do {
     try {
       workLoopSync();
       break;
     } catch (thrownValue) {
       handleError(root, thrownValue);
+      // 出错后清空 workInProgress，避免重复执行导致死循环
+      workInProgress = null;
     }
   } while (true);
 }
@@ -142,7 +158,12 @@ function createWorkInProgress(current, pendingProps) {
   var workInProgress = current.alternate;
 
   if (workInProgress === null) {
-    workInProgress = createFiber(current.tag, pendingProps, current.key, current.mode);
+    workInProgress = createFiber(
+      current.tag,
+      pendingProps,
+      current.key,
+      current.mode,
+    );
     workInProgress.elementType = current.elementType;
     workInProgress.type = current.type;
     workInProgress.stateNode = current.stateNode;
@@ -156,7 +177,6 @@ function createWorkInProgress(current, pendingProps) {
     workInProgress.deletions = null;
   }
 
-
   workInProgress.flags = current.flags & StaticMask;
   workInProgress.childLanes = current.childLanes;
   workInProgress.lanes = current.lanes;
@@ -164,11 +184,9 @@ function createWorkInProgress(current, pendingProps) {
   workInProgress.memoizedProps = current.memoizedProps;
   workInProgress.memoizedState = current.memoizedState;
 
-
   workInProgress.sibling = current.sibling;
   workInProgress.index = current.index;
   workInProgress.ref = current.ref;
-
 
   return workInProgress;
 }
@@ -200,9 +218,14 @@ function setCurrentFiber(fiber) {
   current = fiber;
 }
 function beginWork(current, workInProgress, renderLanes) {
-  switch(workInProgress.tag) {
+  switch (workInProgress.tag) {
     case IndeterminateComponent:
-      return mountIndeterminateComponent(current, workInProgress, workInProgress.type, renderLanes);
+      return mountIndeterminateComponent(
+        current,
+        workInProgress,
+        workInProgress.type,
+        renderLanes,
+      );
     case HostRoot:
       return updateHostRoot(current, workInProgress, renderLanes);
     case HostComponent:
@@ -212,7 +235,12 @@ function beginWork(current, workInProgress, renderLanes) {
   }
 }
 
-function mountIndeterminateComponent(_current, workInProgress, Component, renderLanes) {
+function mountIndeterminateComponent(
+  _current,
+  workInProgress,
+  Component,
+  renderLanes,
+) {
   var props = workInProgress.pendingProps;
   workInProgress.tag = FunctionComponent;
   var value = Component && Component(props);
@@ -233,9 +261,19 @@ function updateHostRoot(current, workInProgress, renderLanes) {
 
 function reconcileChildren(current, workInProgress, nextChildren, renderLanes) {
   if (current === null) {
-    workInProgress.child = mountChildFibers(workInProgress, null, nextChildren, renderLanes);
+    workInProgress.child = mountChildFibers(
+      workInProgress,
+      null,
+      nextChildren,
+      renderLanes,
+    );
   } else {
-    workInProgress.child = reconcileChildFibers(workInProgress, current.child, nextChildren, renderLanes);
+    workInProgress.child = reconcileChildFibers(
+      workInProgress,
+      current.child,
+      nextChildren,
+      renderLanes,
+    );
   }
 }
 var reconcileChildFibers = ChildReconciler(true);
@@ -348,27 +386,38 @@ function ChildReconciler(shouldTrackSideEffects) {
   }
 
   function createChild(returnFiber, newChild, lanes) {
-    if (typeof newChild === 'string' && newChild !== '' || typeof newChild === 'number') {
-      var created = createFiberFromText('' + newChild, returnFiber.mode, lanes);
+    if (
+      (typeof newChild === "string" && newChild !== "") ||
+      typeof newChild === "number"
+    ) {
+      var created = createFiberFromText("" + newChild, returnFiber.mode, lanes);
       created.return = returnFiber;
       return created;
     }
 
-    if (typeof newChild === 'object' && newChild !== null) {
+    if (typeof newChild === "object" && newChild !== null) {
       switch (newChild.$$typeof) {
-        case REACT_ELEMENT_TYPE:
-          {
-            var _created = createFiberFromElement(newChild, returnFiber.mode, lanes);
-            _created.return = returnFiber;
-            return _created;
-          }
+        case REACT_ELEMENT_TYPE: {
+          var _created = createFiberFromElement(
+            newChild,
+            returnFiber.mode,
+            lanes,
+          );
+          _created.return = returnFiber;
+          return _created;
+        }
       }
     }
 
     return null;
   }
 
-  function reconcileSingleTextNode(returnFiber, currentFirstChild, textContent, lanes) {
+  function reconcileSingleTextNode(
+    returnFiber,
+    currentFirstChild,
+    textContent,
+    lanes,
+  ) {
     if (currentFirstChild !== null && currentFirstChild.tag === HostText) {
       deleteRemainingChildren(returnFiber, currentFirstChild.sibling);
       var existing = useFiber(currentFirstChild, textContent);
@@ -381,7 +430,12 @@ function ChildReconciler(shouldTrackSideEffects) {
     return created;
   }
 
-  function reconcileSingleElement(returnFiber, currentFirstChild, element, lanes) {
+  function reconcileSingleElement(
+    returnFiber,
+    currentFirstChild,
+    element,
+    lanes,
+  ) {
     var key = element.key;
     var child = currentFirstChild;
 
@@ -393,7 +447,7 @@ function ChildReconciler(shouldTrackSideEffects) {
           var existing = useFiber(child, element.props);
           existing.return = returnFiber;
           return existing;
-         }
+        }
         deleteRemainingChildren(returnFiber, child);
         break;
       } else {
@@ -406,7 +460,12 @@ function ChildReconciler(shouldTrackSideEffects) {
     _created4.return = returnFiber;
     return _created4;
   }
-  function reconcileChildrenArray(returnFiber, currentFirstChild, newChildren, lanes) {
+  function reconcileChildrenArray(
+    returnFiber,
+    currentFirstChild,
+    newChildren,
+    lanes,
+  ) {
     var resultingFirstChild = null;
     var previousNewFiber = null;
     var oldFiber = currentFirstChild;
@@ -439,20 +498,47 @@ function ChildReconciler(shouldTrackSideEffects) {
     return resultingFirstChild;
   }
 
-  function reconcileChildFibers(returnFiber, currentFirstChild, newChild, lanes) {
-    if (typeof newChild === 'object' && newChild !== null) {
+  function reconcileChildFibers(
+    returnFiber,
+    currentFirstChild,
+    newChild,
+    lanes,
+  ) {
+    if (typeof newChild === "object" && newChild !== null) {
       switch (newChild.$$typeof) {
         case REACT_ELEMENT_TYPE:
-          return placeSingleChild(reconcileSingleElement(returnFiber, currentFirstChild, newChild, lanes));
+          return placeSingleChild(
+            reconcileSingleElement(
+              returnFiber,
+              currentFirstChild,
+              newChild,
+              lanes,
+            ),
+          );
       }
     }
 
-    if (typeof newChild === 'string' && newChild !== '' || typeof newChild === 'number') {
-      return placeSingleChild(reconcileSingleTextNode(returnFiber, currentFirstChild, '' + newChild, lanes));
+    if (
+      (typeof newChild === "string" && newChild !== "") ||
+      typeof newChild === "number"
+    ) {
+      return placeSingleChild(
+        reconcileSingleTextNode(
+          returnFiber,
+          currentFirstChild,
+          "" + newChild,
+          lanes,
+        ),
+      );
     }
 
     if (Array.isArray(newChild)) {
-      return reconcileChildrenArray(returnFiber, currentFirstChild, newChild, lanes);
+      return reconcileChildrenArray(
+        returnFiber,
+        currentFirstChild,
+        newChild,
+        lanes,
+      );
     }
 
     return deleteRemainingChildren(returnFiber, currentFirstChild);
@@ -468,19 +554,19 @@ function completeUnitOfWork(unitOfWork) {
     var current = completedWork.alternate;
     var returnFiber = completedWork.return;
 
-    if(completedWork.flags & Incomplete === NoFlags) {
+    if ((completedWork.flags & Incomplete) === NoFlags) {
       setCurrentFiber(completedWork);
       var next = void 0;
 
       next = completeWork(current, completedWork, subtreeRenderLanes);
       resetCurrentFiber();
 
-      if(next !== null) {
+      if (next !== null) {
         workInProgress = next;
         return;
       }
     } else {
-      if(returnFiber !== null) {
+      if (returnFiber !== null) {
         // 设置父节点的标识为 Incomplete，重置子树的标识位为 NoFlags，删除父节点的 deletions
         returnFiber.flags |= Incomplete;
         returnFiber.subtreeFlags = NoFlags;
@@ -492,7 +578,7 @@ function completeUnitOfWork(unitOfWork) {
     }
 
     var siblingFiber = completedWork.sibling;
-    if(siblingFiber !== null) {
+    if (siblingFiber !== null) {
       workInProgress = siblingFiber;
       return;
     }
@@ -503,36 +589,136 @@ function completeUnitOfWork(unitOfWork) {
 
 function completeWork(current, workInProgress, renderLanes) {
   var newProps = workInProgress.pendingProps;
-  switch(workInProgress.tag) {
+  switch (workInProgress.tag) {
     case HostRoot:
+      if(current !== null) {
+        var prevState = current.memoizedState;
+        if (!prevState.isDehydrated) {
+          workInProgress.flags |= Snapshot;
+        }
+      }
       bubbleProperties(workInProgress);
       return null;
-    case HostComponent:
-      {
-        var type = workInProgress.type;
-        var rootContainerInstance = workInProgressRoot.current;
-        if(current !== null && workInProgress.stateNode !== null) {
-          updateHostComponent(current, workInProgress, type, newProps)
-        } else {
-          var instance = createInstance(type, newProps, rootContainerInstance, workInProgress);
-          appendAllChildren(instance, workInProgress, false, false);
-          workInProgress.stateNode = instance;
-        }
-        bubbleProperties(workInProgress);
-        return null;
+    case HostComponent: {
+      var type = workInProgress.type;
+      // 传入 DOM 容器（root.containerInfo），不能传 fiber
+      var container = workInProgressRoot.current.stateNode.containerInfo;
+      if (current !== null && workInProgress.stateNode !== null) {
+        updateHostComponent(current, workInProgress, type, newProps);
+      } else {
+        var instance = createInstance(
+          type,
+          newProps,
+          container,
+          workInProgress,
+        );
+        appendAllChildren(instance, workInProgress, false, false);
+        workInProgress.stateNode = instance;
+        finalizeInitialChildren(
+          instance,
+          type,
+          newProps,
+          container,
+        );
       }
-    case FunctionComponent:
-      {
-        bubbleProperties(workInProgress);
-        return null;
-      }
+      bubbleProperties(workInProgress);
+      return null;
+    }
+    case FunctionComponent: {
+      bubbleProperties(workInProgress);
+      return null;
+    }
     default:
       return null;
   }
   return null;
 }
+function finalizeInitialChildren(
+  domElement,
+  type,
+  props,
+  rootContainerInstance,
+) {
+  setInitialDOMProperties(type, domElement, rootContainerInstance, props, false);
+}
+function setInitialDOMProperties(
+  tag,
+  domElement,
+  rootContainerElement,
+  nextProps,
+  isCustomComponentTag,
+) {
+  for (var propKey in nextProps) {
+    if (!nextProps.hasOwnProperty(propKey)) {
+      continue;
+    }
+
+    var nextProp = nextProps[propKey];
+
+    if (propKey === CHILDREN) {
+      if (typeof nextProp === "string") {
+        var canSetTextContent = tag !== "textarea" || nextProp !== "";
+
+        if (canSetTextContent) {
+          setTextContent(domElement, nextProp);
+        }
+      } else if (typeof nextProp === "number") {
+        setTextContent(domElement, "" + nextProp);
+      }
+    }
+  }
+}
+var CHILDREN = "children";
+var ELEMENT_NODE = 1;
+var TEXT_NODE = 3;
+var COMMENT_NODE = 8;
+var DOCUMENT_NODE = 9;
+var DOCUMENT_FRAGMENT_NODE = 11;
+
+var setTextContent = function (node, text) {
+  if (text) {
+    var firstChild = node.firstChild;
+
+    if (
+      firstChild &&
+      firstChild === node.lastChild &&
+      firstChild.nodeType === TEXT_NODE
+    ) {
+      firstChild.nodeValue = text;
+      return;
+    }
+  }
+
+  node.textContent = text;
+};
+function bubbleProperties(completedWork) {
+  var didBailout =
+    completedWork.alternate !== null &&
+    completedWork.alternate.child === completedWork.child;
+  var newChildLanes = NoLanes;
+  var subtreeFlags = NoFlags;
+
+  var _child = completedWork.child;
+
+  while (_child !== null) {
+    subtreeFlags |= _child.subtreeFlags;
+    subtreeFlags |= _child.flags;
+
+    _child.return = completedWork;
+    _child = _child.sibling;
+  }
+  completedWork.subtreeFlags |= subtreeFlags;
+}
 function shouldSetTextContent(type, props) {
-  return type === 'textarea' || type === 'noscript' || typeof props.children === 'string' || typeof props.children === 'number' || typeof props.dangerouslySetInnerHTML === 'object' && props.dangerouslySetInnerHTML !== null && props.dangerouslySetInnerHTML.__html != null;
+  return (
+    type === "textarea" ||
+    type === "noscript" ||
+    typeof props.children === "string" ||
+    typeof props.children === "number" ||
+    (typeof props.dangerouslySetInnerHTML === "object" &&
+      props.dangerouslySetInnerHTML !== null &&
+      props.dangerouslySetInnerHTML.__html != null)
+  );
 }
 
 function updateHostComponent(current, workInProgress, type, newProps) {
@@ -550,7 +736,12 @@ function updateHostComponent(current, workInProgress, type, newProps) {
   return workInProgress.child;
 }
 
-function  appendAllChildren(parent, workInProgress, needsVisibilityToggle, isHidden) {
+function appendAllChildren(
+  parent,
+  workInProgress,
+  needsVisibilityToggle,
+  isHidden,
+) {
   var node = workInProgress.child;
 
   while (node !== null) {
@@ -580,7 +771,7 @@ function  appendAllChildren(parent, workInProgress, needsVisibilityToggle, isHid
     node.sibling.return = node.return;
     node = node.sibling;
   }
-};
+}
 
 // 一直往后插入子元素
 function appendInitialChild(parentInstance, child) {
@@ -594,9 +785,7 @@ var FunctionComponent = 0;
 var IndeterminateComponent = 2;
 var HostComponent = 5;
 var HostText = 6;
-var REACT_ELEMENT_TYPE = Symbol.for('react.element');
-var StaticMask = 0;
-var Forked = 0;
+var REACT_ELEMENT_TYPE = Symbol.for("react.element");
 var subtreeRenderLanes = NoLanes;
 var RootDidNotComplete = 0;
 
@@ -612,34 +801,132 @@ function createFiberFromElement(element, mode, lanes) {
   var type = element.type;
   var key = element.key;
   var pendingProps = element.props;
-  var fiber = createFiber(typeof type === 'function' ? IndeterminateComponent : HostComponent, pendingProps, key, mode);
+  var fiber = createFiber(
+    typeof type === "function" ? IndeterminateComponent : HostComponent,
+    pendingProps,
+    key,
+    mode,
+  );
   fiber.elementType = type;
   fiber.type = type;
   fiber.lanes = lanes;
   return fiber;
 }
 
-function createInstance(type, props, rootContainerInstance, hostContext) {
-  return document.createElement(type);
+function createInstance(type, props, container, hostContext) {
+  // container 为 DOM 容器节点，创建子元素需用 document.createElement
+  var ownerDocument = container && container.ownerDocument ? container.ownerDocument : document;
+  var domElement = ownerDocument.createElement(type);
+  return domElement;
 }
 
 function commitRoot(root) {
-  var finishedWork = root.finishedWork;
-  if (finishedWork === null) {
-    return;
+  try {
+    commitRootImpl(root);
+  } finally {
   }
-  
-  // 简化的提交逻辑：将 fiber 树转换为 DOM
-  commitMutationEffects(root, finishedWork);
+
+  return null;
 }
 
-function commitMutationEffects(root, finishedWork) {
-  // 简化的提交：直接提交整个树
-  commitPlacement(finishedWork);
+function commitRootImpl(root) {
+  var finishedWork = root.finishedWork;
+  var lanes = root.finishedLanes;
+
+  root.finishedWork = null;
+  root.finishedLanes = NoLanes;
+
+  root.callbackNode = null;
+  root.callbackPriority = NoLane;
+
+  if (root === workInProgressRoot) {
+    workInProgressRoot = null;
+    workInProgress = null;
+    workInProgressRootRenderLanes = NoLanes;
+  }
+  var subtreeHasEffects =
+    (finishedWork.subtreeFlags &
+      (BeforeMutationMask | MutationMask | LayoutMask | PassiveMask)) !==
+    NoFlags;
+  var rootHasEffect =
+    (finishedWork.flags &
+      (BeforeMutationMask | MutationMask | LayoutMask | PassiveMask)) !==
+    NoFlags;
+
+  if (subtreeHasEffects || rootHasEffect) {
+    commitMutationEffects(root, finishedWork, lanes);
+    root.current = finishedWork;
+  } else {
+    root.current = finishedWork;
+  }
+  return null;
 }
 
+function commitMutationEffects(root, finishedWork, committedLanes) {
+  commitMutationEffectsOnFiber(finishedWork, root);
+}
+
+function commitMutationEffectsOnFiber(finishedWork, root) {
+  var current = finishedWork.alternate;
+  var flags = finishedWork.flags;
+
+  switch (finishedWork.tag) {
+    case FunctionComponent: {
+      recursivelyTraverseMutationEffects(root, finishedWork);
+      commitReconciliationEffects(finishedWork);
+      return;
+    }
+
+    case HostComponent: {
+      recursivelyTraverseMutationEffects(root, finishedWork);
+      commitReconciliationEffects(finishedWork);
+      return;
+    }
+
+    case HostText: {
+      recursivelyTraverseMutationEffects(root, finishedWork);
+      commitReconciliationEffects(finishedWork);
+      return;
+    }
+
+    case HostRoot: {
+      recursivelyTraverseMutationEffects(root, finishedWork);
+      commitReconciliationEffects(finishedWork);
+      return;
+    }
+
+    default: {
+      recursivelyTraverseMutationEffects(root, finishedWork);
+      commitReconciliationEffects(finishedWork);
+      return;
+    }
+  }
+}
+
+function recursivelyTraverseMutationEffects(root, parentFiber) {
+  if (parentFiber.subtreeFlags & MutationMask) {
+    var child = parentFiber.child;
+
+    while (child !== null) {
+      commitMutationEffectsOnFiber(child, root);
+      child = child.sibling;
+    }
+  }
+}
+
+function commitReconciliationEffects(finishedWork) {
+  var flags = finishedWork.flags;
+
+  if (flags & Placement) {
+    try {
+      commitPlacement(finishedWork);
+    } catch (error) {
+      console.error("Error during render:", error);
+    }
+    finishedWork.flags &= ~Placement;
+  }
+}
 function commitPlacement(finishedWork) {
-  // 如果是 HostRoot，直接使用容器
   var parent = null;
   if (finishedWork.tag === HostRoot) {
     parent = finishedWork.stateNode.containerInfo;
@@ -653,12 +940,11 @@ function commitPlacement(finishedWork) {
       }
     }
   }
-  
+
   if (!parent) {
     return;
   }
-  
-  // 遍历子节点并添加到 DOM
+
   var node = finishedWork.child;
   while (node !== null) {
     if (node.tag === HostComponent || node.tag === HostText) {
@@ -666,10 +952,9 @@ function commitPlacement(finishedWork) {
         appendInitialChild(parent, node.stateNode);
       }
     } else if (node.child !== null) {
-      // 递归处理子节点
       commitPlacement(node);
     }
-    
+
     node = node.sibling;
   }
 }
@@ -686,26 +971,24 @@ function getHostParentFiber(fiber) {
 }
 
 function handleError(root, thrownValue) {
-  // 简化的错误处理
-  console.error('Error during render:', thrownValue);
+  console.error("Error during render:", thrownValue);
+  workInProgress = null;
 }
 
-// 定义 React 对象（JSX 转换需要）
 var React = {
-  createElement: function(type, props, ...children) {
+  createElement: function (type, props, ...children) {
     return {
       $$typeof: REACT_ELEMENT_TYPE,
       type: type,
       key: props && props.key ? props.key : null,
       props: {
         ...props,
-        children: children.length === 1 ? children[0] : children
-      }
+        children: children.length === 1 ? children[0] : children,
+      },
     };
-  }
+  },
 };
 
-// 定义 ReactDOM 对象
 var ReactDOM = {
-  createRoot: createRoot
+  createRoot: createRoot,
 };
